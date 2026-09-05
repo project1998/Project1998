@@ -209,6 +209,11 @@ public sealed partial class Session
         // the talisman never touches the ground. In the pen the rite answers; anywhere else the flag does.
         if (TryLeviathanTalismanDrop(def)) return;
 
+        // Dropping the sacred water in front of The Infected is likewise the rite, not a drop — and for the
+        // same reason it is checked before the NoDrop refusal that guards the vial everywhere else. See
+        // Session.TrySacredWaterDrop and Server/PoetWhipQuest.cs.
+        if (TrySacredWaterDrop(def)) return;
+
         if (def.NoDrop) { SendLog($"You can't drop {def.Name}."); return; }
 
         // Dropping a pick/axe/sickle beside a resource node is how you gather on 4.95 — the drop IS the

@@ -411,10 +411,13 @@ public sealed partial class Session
         TryForage();                         // adjacent apple tree / rose bush -> small chance of an item
         TryGinseng();                        // Guol Tiger Pass ginseng rocks -> young_ginseng (Chu Rua quest)
         TryFoxSpirit();                      // Worn path/trail: 1 step in 10 a fox pops up with a riddle
+        TryForeverBranch();                  // Forever Tree ground: 1 step in 100 turns up a Forever branch
         if (TryLeviathanHermitDoor()) return;// the Hermit's hut door: in if you freed one, shoved back if not (warps)
         if (TrySuteCaveMouth()) return;      // Buya's north edge: coated -> into Sute's Cave, else shoved back (warps)
         if (TryIceBeastLava()) return;       // Northeast Koguryo lava row: shoes gate + spend-on-return (warps)
         if (TryMythicFallRoom()) return;     // mythic cave trap floor -> drop to a lower sub-room (warps)
+        if (TryNangenPagoda()) return;       // Nagnang pagoda: acolytes into Path of Choice, everyone else shoved back (warps)
+        if (TryOblivionFall()) return;       // Oblivion floor: 1 step in 100 drops you into the Subvoid (warps)
         TryWorldMapTravel();                 // town edge tile -> inter-continent travel picker
     }
 
@@ -1015,6 +1018,121 @@ public sealed partial class Session
         Log.Info($"   -> FALL through map {_char.Map} -> {f.Map} '{dm.Name}' ({f.X},{f.Y})");
         EnterMap(dm.Id, dm.Xs, dm.Ys, f.X, f.Y, dm.Name);
         SendMiniText("You fall into a steep winding passage.");   // RTK warp_trap flavor, unified to all fall caves
+        return true;
+    }
+
+    // ---- Poet's whip: the three tile triggers (onScriptedTilesQuest.lua) — see Server/PoetWhipQuest.cs ----
+
+    /// <summary>The Forever Tree's ground. While Staff is owed a branch, each step inside RTK's box has a
+    /// 1-in-<see cref="PoetWhipQuest.BranchRate"/> chance to turn one up — and only one: holding a branch
+    /// already stops the roll, which is RTK's own guard and what keeps a Poet from farming them for friends
+    /// ("it MUST be you who picks up the branch from the tree").
+    ///
+    /// <para>The dialog is the branch's own icon rather than a minitext, matching RTK's <c>dialogSeq</c>
+    /// against the item portrait — the same shape (and the same reasoning) as <see cref="TryGinseng"/>.</para></summary>
+    private void TryForeverBranch()
+    {
+        if (!PoetWhipQuest.InTreeGround(_char.Map, _char.X, _char.Y)) return;
+        if (QuestStage(PoetWhipQuest.Key) != PoetWhipQuest.StageBranch) return;
+        if (CountItem(PoetWhipQuest.Branch) > 0) return;
+        if (Random.Shared.Next(PoetWhipQuest.BranchRate) != 0) return;
+
+        var def = Content.ItemByKey(PoetWhipQuest.Branch);
+        if (def is null) return;
+        if (!GiveItem(def, 1)) return;   // bag full: no branch, and the roll simply comes round again
+
+        var icon = DialogPortrait.Item(IconOf(def), _ver == ClientVersion.V533 ? def.IconColor : (byte)0);
+        SendScriptMessageP(_char.Id, "You find one of the Tree's branches upon the ground.",
+                           icon, prev: false, next: false);
+        Log.Info($"   -> FOREVER BRANCH found by {_char.Name} at ({_char.X},{_char.Y})");
+    }
+
+    /// <summary>The pagoda south of Nagnang's Poet guild — the only door into Path of Choice, and there is no
+    /// Warps.csv row for it (the way BACK is one, which is how the tile pairing was pinned). Acolytes are
+    /// dropped on the entry row; everyone else is shoved two tiles south with RTK's own refusal. True when it
+    /// moved the player, so the remaining step hooks are skipped.</summary>
+    private bool TryNangenPagoda()
+    {
+        if (_char.Map != PoetWhipQuest.PagodaMap || _char.Y != PoetWhipQuest.PagodaY) return false;
+        if (Array.IndexOf(PoetWhipQuest.PagodaX, (int)_char.X) < 0) return false;
+
+        if (!HasLegend(PoetWhipQuest.LegendAcolyte))
+        {
+            // @anywarp waives the legend gate with the usual echo, as every other quest door here does.
+            if (_waiveWarpGate)
+            {
+                SendMiniText("[anywarp] pagoda gate waived — would have said: Only Nangen Acolyte may enter.");
+                Log.Info($"   -> NANGEN pagoda WAIVED (@anywarp) for {_char.Name}");
+            }
+            else
+            {
+                SendMiniText("Only Nangen Acolyte may enter.");
+                _world.SetPlayerPosition(this, _char.X, PoetWhipQuest.PagodaPushY);
+                _char.Y = (ushort)PoetWhipQuest.PagodaPushY;
+                SendXy();
+                return true;
+            }
+        }
+
+        if (!Content.TryMap(PoetWhipQuest.PathOfChoiceMap, out var dm) || dm is null) { SendXy(); return true; }
+        ushort ex = (ushort)Random.Shared.Next(PoetWhipQuest.PathEntryMinX, PoetWhipQuest.PathEntryMaxX + 1);
+        Log.Info($"   -> NANGEN pagoda -> map {PoetWhipQuest.PathOfChoiceMap} '{dm.Name}' ({ex},{PoetWhipQuest.PathEntryY}) for {_char.Name}");
+        EnterMap(dm.Id, dm.Xs, dm.Ys, ex, PoetWhipQuest.PathEntryY, dm.Name);
+        return true;
+    }
+
+    /// <summary>Oblivion's floor. Every step inside RTK's box has a 1-in-<see cref="PoetWhipQuest.FallRate"/>
+    /// chance to drop you into the Subvoid pocket where The Infected waits. Unconditional on quest state, as
+    /// RTK has it — the acolyte gate is the pagoda, so only acolytes are ever standing here. True when it moved
+    /// the player.</summary>
+    private bool TryOblivionFall()
+    {
+        if (!PoetWhipQuest.InOblivionFallBox(_char.Map, _char.X, _char.Y)) return false;
+        if (Random.Shared.Next(PoetWhipQuest.FallRate) != 0) return false;
+        if (!Content.TryMap(PoetWhipQuest.SubvoidMap, out var dm) || dm is null) return false;   // dest unrenderable -> no fall
+
+        SendMiniText("You fall into a sub void.");
+        Log.Info($"   -> SUBVOID fall from ({_char.X},{_char.Y}) for {_char.Name}");
+        EnterMap(dm.Id, dm.Xs, dm.Ys, PoetWhipQuest.SubvoidX, PoetWhipQuest.SubvoidY, dm.Name);
+        return true;
+    }
+
+    /// <summary>The rite that ends the quest: DROP the sacred water while standing next to The Infected and
+    /// facing it, and the water destroys it (RTK <c>Items/Quest/sacred_water.lua</c> <c>on_drop</c>). Facing is
+    /// the whole targeting rule — RTK uses <c>getTargetFacing</c> and Staff says so in capitals — so this reads
+    /// <see cref="FrontTile"/> and nothing else.
+    ///
+    /// <para><b>In the Subvoid every outcome SPEAKS, and keeps the vial.</b> Same call as the leviathan
+    /// talisman: the vial is registry-hardened NoDrop (Items.csv 29015 <c>ItmDroppable</c> 0→1) so this is the
+    /// only drop that does anything, and a one-shot quest item must never end up on the floor because the
+    /// player was facing the wrong way. Off this map the NoDrop flag answers instead, so nothing is said.</para>
+    ///
+    /// <para>The Infected is DESPAWNED, not killed — no exp, no loot, and its spawn point refills so the next
+    /// acolyte finds one. (RTK removes its full health, which is the same thing said in the engine's only
+    /// vocabulary; going through the kill path here would also bank a kill and pay exp for a scripted event.)
+    /// Returns true if the drop was consumed — performed OR refused with a reason — so
+    /// <see cref="HandleDropItem"/> stops, the same contract as <see cref="TryLeviathanTalismanDrop"/>.</para></summary>
+    private bool TrySacredWaterDrop(ItemDef def)
+    {
+        if (def.Key != PoetWhipQuest.Water) return false;
+        if (_char.Map != PoetWhipQuest.SubvoidMap) return false;   // elsewhere the NoDrop flag refuses the drop
+
+        var (fx, fy) = FrontTile();
+        var mob = _world.MobAt(_char.Map, (ushort)fx, (ushort)fy);
+        Log.Info($"   -> SACRED WATER dropped by {_char.Name} at ({_char.X},{_char.Y}) facing ({fx},{fy}): " +
+                 $"target={mob?.Key ?? "NOTHING"}, stage={QuestStage(PoetWhipQuest.Key)}");
+
+        if (QuestStage(PoetWhipQuest.Key) != PoetWhipQuest.StageWater)
+        { Notify("The water lies still in your hands."); return true; }
+        if (mob is null || mob.Key != PoetWhipQuest.InfectedMob)
+        { Notify("You must stand NEXT to the infected creature, and FACE it."); return true; }
+
+        if (!TakeItem(PoetWhipQuest.Water, 1)) return false;
+
+        NpcBubble(mob, "NUUUGHHH! I shall be reborn...");   // NpcBubble prefixes the speaker's own name, as RTK's talk does
+        _world.DespawnMob(_char.Map, mob);
+        SetQuestStage(PoetWhipQuest.InfectedReg, 1);
+        Log.Info($"   -> INFECTED destroyed by {_char.Name} — return to Staff for the whip");
         return true;
     }
 

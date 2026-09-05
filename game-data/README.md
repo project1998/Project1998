@@ -57,7 +57,7 @@ and `Sources.csv` are extractor output only and are not loaded by the server.
 | `AreaSpawnsCrafting.csv` | `P1998_AREASPAWNS_CRAFT` | 8 | 8 | from file |
 | `ServerTuning.csv` | `P1998_SERVER_TUNING` | 16 | 16 | from file |
 | `EraFeatures.csv` | `P1998_ERA_FEATURES` | 10 | 10 | from file |
-| `NPCs.csv` | `P1998_NPCS` | 368 | 288 | from file |
+| `NPCs.csv` | `P1998_NPCS` | 368 | 289 | from file |
 | `MinorQuests.csv` | `P1998_MINORQUESTS` | 101 | 101 | from file |
 | `ShopStock.csv` | `P1998_SHOPSTOCK` | 38 | 38 | from file |
 | `ShopBuysFrom.csv` | `P1998_SHOPBUYSFROM` | 46 | 46 | from file |
