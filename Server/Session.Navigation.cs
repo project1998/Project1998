@@ -413,6 +413,8 @@ public sealed partial class Session
         TryFoxSpirit();                      // Worn path/trail: 1 step in 10 a fox pops up with a riddle
         if (TryLeviathanHermitDoor()) return;// the Hermit's hut door: in if you freed one, shoved back if not (warps)
         if (TrySuteCaveMouth()) return;      // Buya's north edge: coated -> into Sute's Cave, else shoved back (warps)
+        if (TryGauntletEntrance()) return;   // Nagnang's west alcove: on the shield trial -> the Gauntlet, else shoved back
+        if (TryGauntletAltar()) return;      // Objective: the statue of Chung Ryong pays (or refuses) the trial
         if (TryIceBeastLava()) return;       // Northeast Koguryo lava row: shoes gate + spend-on-return (warps)
         if (TryMythicFallRoom()) return;     // mythic cave trap floor -> drop to a lower sub-room (warps)
         TryWorldMapTravel();                 // town edge tile -> inter-continent travel picker
@@ -647,6 +649,99 @@ public sealed partial class Session
         Notify("The powder disappears as you pass the portal.");
         return Warp(SuteQuest.WelcomeMap,
                     (ushort)(QuestRandom(2) == 1 ? SuteQuest.LandX0 : SuteQuest.LandX1), SuteQuest.LandY);
+    }
+
+    // ---- The Gauntlet (onScriptedTilesQuest.lua; see Server/NagnangShieldQuest.cs) ----------------
+    // Nagnang's warrior trial. Two scripted tiles: the cave mouth, and the statue at the far end.
+    //
+    // The MOUTH is a scripted tile rather than a Warps.csv row for the same reason Sute's is — the
+    // destination is conditional. It is only a door for a Warrior who has paid Sword the green squirrel pelt
+    // and has not already won the shield, and WHICH of the five parallel copies of the cave it opens onto is
+    // read off the character's level. Everyone else it simply does not carry, and (as in RTK) says nothing
+    // about it: the trial has no refusal line in any surviving source, and inventing one would put words in
+    // an NPC's mouth. Crossing snapshots the forbidden kill counters, which is what makes the trial a
+    // per-RUN test rather than a lifetime one.
+    private bool TryGauntletEntrance()
+    {
+        if (_char.Map != NagnangShieldQuest.NagnangMap || _char.Y != NagnangShieldQuest.MouthY) return false;
+        if (!NagnangShieldQuest.MouthX.Contains(_char.X)) return false;
+
+        bool onTrial = CharBasePathId == NagnangShieldQuest.WarriorPath
+                       && QuestStage(NagnangShieldQuest.StageReg) >= 1
+                       && !HasLegend(NagnangShieldQuest.Legend);
+        ushort dest = NagnangShieldQuest.EntranceFor(_char.Level);
+
+        if (!onTrial || dest == 0)
+        {
+            // @anywarp: the mouth becomes a plain portal into the tier the level would have picked (or the
+            // shallowest, below the ladder's floor), with the usual echo of what it would have done.
+            if (!_waiveWarpGate)
+            {
+                Log.Info($"   -> GAUNTLET mouth REFUSED for {_char.Name} (path {CharBasePathId} level {_char.Level} " +
+                         $"stage {QuestStage(NagnangShieldQuest.StageReg)} done={HasLegend(NagnangShieldQuest.Legend)})");
+                return Warp(_char.Map, (ushort)_char.X, NagnangShieldQuest.MouthPushToY);
+            }
+            SendMiniText("[anywarp] Gauntlet entry requirement waived — the trial would not have let you in.");
+            if (dest == 0) dest = NagnangShieldQuest.Tiers[0].Map;
+        }
+
+        SetQuestStage(NagnangShieldQuest.KillSnapshotReg, ForbiddenGauntletKills());
+        Log.Info($"   -> GAUNTLET entrance -> map {dest} for {_char.Name} (level {_char.Level})");
+        return Warp(dest, (ushort)(QuestRandom(2) == 1 ? NagnangShieldQuest.LandX0 : NagnangShieldQuest.LandX1),
+                    NagnangShieldQuest.LandY);
+    }
+
+    /// <summary>Lifetime kills of the six creatures the trial forbids. The trial compares this against the
+    /// snapshot taken at the mouth, so only what died on THIS run counts.</summary>
+    private int ForbiddenGauntletKills()
+    {
+        int n = 0;
+        foreach (var key in NagnangShieldQuest.Forbidden) n += KillCount(key);
+        return n;
+    }
+
+    // The statue of Chung Ryong at the end of every tier's Objective room. Standing on the ring of tiles
+    // around it IS touching it (RTK runs the same check off its own perimeter box), so there is no click:
+    //   * nothing red or blue died on this run -> the shield and the legend, then the statue's speech,
+    //   * something did                        -> two lines and a throw back out to the cave mouth. The
+    //     stage stays at 1, so the run can be walked again — and re-entering re-snapshots, which is what
+    //     "the run" means.
+    // Returns true when it fired, so the remaining step hooks are skipped.
+    private bool TryGauntletAltar()
+    {
+        if (!NagnangShieldQuest.IsObjective(_char.Map)) return false;
+        if (!NagnangShieldQuest.AtAltar(_char.X, _char.Y)) return false;
+        if (HasLegend(NagnangShieldQuest.Legend)) return false;   // already won — it is stone again
+        if (IsDead || DialogBusy) return false;
+
+        if (ForbiddenGauntletKills() > QuestCounter(NagnangShieldQuest.KillSnapshotReg))
+        {
+            foreach (var line in NagnangShieldQuest.StatueRefusal) SendMiniText(line);
+            Log.Info($"   -> GAUNTLET altar REFUSED {_char.Name} — killed a forbidden creature on this run");
+            return Warp(NagnangShieldQuest.NagnangMap, (ushort)NagnangShieldQuest.MouthX[0],
+                        NagnangShieldQuest.MouthExitY);
+        }
+
+        // Shield first: a full pack must not consume the trial. Nothing is spent until it lands.
+        if (!GiveRewardItem(NagnangShieldQuest.Shield, 1))
+        {
+            SendMiniText("There is no room in your pack for the shield.");
+            return true;
+        }
+        SetQuestStage(NagnangShieldQuest.StageReg, 0);
+        AddLegend($"Completed the Nagnang Warrior Trial ({Character.GameDate})", NagnangShieldQuest.Legend,
+                  NagnangShieldQuest.LegendIcon, NagnangShieldQuest.LegendColor);
+        Log.Info($"   -> GAUNTLET altar PAID {_char.Name} the Nagnang shield");
+
+        // Fire-and-forget: the statue's five pages are awaited one at a time and a step handler cannot block.
+        _ = RunGauntletAltarAsync();
+        return true;
+    }
+
+    private async Task RunGauntletAltarAsync()
+    {
+        try { await DlgPush(NagnangShieldQuest.StatueLook, NagnangShieldQuest.StatueColor, NagnangShieldQuest.StatueReward); }
+        catch (Exception e) { Log.Error($"Gauntlet statue speech threw for '{_char.Name}' — the shield and legend are already granted", e); }
     }
 
     // ---- Newbie area, quest 3: the coordinate lesson (npc_dialog.lua TutorialNpc1) ------------------
