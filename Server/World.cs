@@ -1772,6 +1772,19 @@ public sealed partial class World
         }
     }
 
+    /// <summary>Give a conjured creature a LIFESPAN but no owner — a scripted ambush (Master Dagger's
+    /// assassins) rather than a pet. It hunts like any wild mob, it pays nothing when killed (that is what
+    /// <see cref="Mob.Summoned"/> already means: made out of nothing seconds ago), and <see cref="Tick"/>
+    /// despawns it when the timer lapses, on the same path a lapsed summon takes.</summary>
+    public void ExpireUnowned(Mob mob, int durMs)
+    {
+        lock (_lock)
+        {
+            mob.PetExpiresAt = Environment.TickCount64 + durMs;
+            mob.Summoned = true;
+        }
+    }
+
     /// <summary>Make a mob forget one player's threat for a fixed duration.</summary>
     public void ForgetPlayer(Mob mob, uint playerId, int durMs)
     {

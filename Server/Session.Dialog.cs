@@ -340,7 +340,7 @@ public sealed partial class Session
         // pane is a readout, and every other look-at line there is bare too.
         if (_world.MobById(_char.Map, id) is { } mob)
         {
-            SendMiniText(mob.Name);
+            ObserveMob(mob);
             return;
         }
 
@@ -351,6 +351,29 @@ public sealed partial class Session
         // (§11l), not a chat command. An id matching nobody at all (stale/disconnected) is a no-op.
         var target = _world.PlayerById(id);
         if (target is not null) SendClickProfile(target);
+    }
+
+    /// <summary>"What is that creature" — the one place both ways of looking at a mob converge: the 0x43
+    /// click on its sprite (above, RTK's <c>onLook</c>) and the ';' look-at key (<see cref="HandleLookAt"/>,
+    /// RTK's <c>clif_parselookat_2</c>, which RTK does not script at all). Both print the bare name, and both
+    /// are the moment a quest may notice you looked — a player told to go and look at a bird must not be told
+    /// they have not looked at it because they used the other key.</summary>
+    private void ObserveMob(Mob mob)
+    {
+        SendMiniText(mob.Name);
+        NoteBlueRooster(mob);
+    }
+
+    /// <summary>Step 3 of the Dagger Uniform quest: seeing the Blue Rooster that wanders southern Buya (see
+    /// <see cref="DaggerUniformQuest"/>). Recorded only while Dagger is actually waiting for it, so looking at
+    /// a rooster leaves no state behind for anyone else. RTK's <c>onLook</c> sets its flag silently; the
+    /// mini-text is added because "look at a bird" is not an act a player can otherwise tell succeeded.</summary>
+    private void NoteBlueRooster(Mob mob)
+    {
+        if (mob.Key != DaggerUniformQuest.RoosterMob) return;
+        if (QuestStage(DaggerUniformQuest.Key) != DaggerUniformQuest.Stage.WatchForRooster) return;
+        SetQuestStage(DaggerUniformQuest.Key, DaggerUniformQuest.Stage.SeenRooster);
+        Notify(DaggerUniformQuest.RoosterNoticed);
     }
 
     // F2: flip the subpath-chat toggle and confirm via mini-text (RTK: "Subpath Chat: ON"/"OFF" — same

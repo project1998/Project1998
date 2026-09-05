@@ -42,6 +42,7 @@ public static class NpcScripts
         ["border_patrol"] = BorderPatrolAbility.Instance,
         ["hermit"] = HermitAbility.Instance,
         ["sute"] = SuteQuestAbility.Instance,
+        ["dagger_uniform"] = DaggerUniformAbility.Instance,
         ["tiger_mail"] = TigerMailAbility.Instance,
         ["armor_quest"] = ArmorQuestAbility.Instance,
         ["stars_hint"] = StarHintAbility.Instance,
