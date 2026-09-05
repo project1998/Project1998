@@ -89,7 +89,7 @@ NpcId,NpcIdentifier,NpcDescription,NpcType,NpcMapId,NpcX,NpcY,NpcTimer,NpcLook,N
 88,MessengerNpc,Paryu,0,337,8,3,0,61,6,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,
 89,ExpSeller,Sunset,0,19,4,4,0,47,14,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 90,ExpSeller,Midnight,0,2970,4,10,0,47,14,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-91,WarriorTrainerNpc,Sword,0,3820,5,5,0,39,6,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+91,WarriorTrainerNpc,Sword,0,2510,8,3,0,39,6,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 92,WarpTrapTigerPeltNpc,warp trap pelt,2,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 93,ChapelNpc,Peach,0,340,9,7,0,3,0,0,2,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,
 94,TotemNpc,Ju jak priest,0,4,10,5,0,9,23,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,

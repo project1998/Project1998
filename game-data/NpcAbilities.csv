@@ -1,12 +1,12 @@
 NpcKey,Abilities
-SmithNpc,shop|repair
+SmithNpc,shop|repair|nagnang_tall_shield
 MessengerNpc,shop|messenger
 InnNpc,shop|bank
 InnNpc2,
 FishNpc,fish
 LibrarianNpc,librarian
 MainTutorialNpc,stars_hint
-WarriorTrainerNpc,warrior_trainer|minor_quest|armor_quest
+WarriorTrainerNpc,warrior_trainer|minor_quest|armor_quest|nagnang_shield
 RogueTrainerNpc,rogue_trainer|minor_quest|armor_quest
 MageTrainerNpc,mage_trainer|minor_quest|sute|armor_quest
 PoetTrainerNpc,poet_trainer|minor_quest|armor_quest

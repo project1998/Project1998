@@ -50,14 +50,14 @@ and `Sources.csv` are extractor output only and are not loaded by the server.
 | `MobStationary.csv` | `P1998_MOB_STATIONARY` | 14 | 14 | from file |
 | `mobs.csv` | `P1998_MOBS` | 716 | 716 | from file |
 | `Items.csv` | `P1998_ITEMS` | 2,544 | 2,544 | from file |
-| `Warps.csv` | `P1998_WARPS` | 4,691 | 4,208 | from file |
+| `Warps.csv` | `P1998_WARPS` | 4,776 | 4,293 | from file |
 | `Spawns.csv` | `P1998_SPAWNS` | 1,175 | 1,174 | from file |
 | `AreaSpawns.csv` | `P1998_AREASPAWNS` | 2,588 | 2,588 | from file |
 | `AreaSpawnsTrap.csv` | `P1998_AREASPAWNS_TRAP` | 20 | 20 | from file |
 | `AreaSpawnsCrafting.csv` | `P1998_AREASPAWNS_CRAFT` | 8 | 8 | from file |
 | `ServerTuning.csv` | `P1998_SERVER_TUNING` | 16 | 16 | from file |
 | `EraFeatures.csv` | `P1998_ERA_FEATURES` | 10 | 10 | from file |
-| `NPCs.csv` | `P1998_NPCS` | 368 | 288 | from file |
+| `NPCs.csv` | `P1998_NPCS` | 368 | 289 | from file |
 | `MinorQuests.csv` | `P1998_MINORQUESTS` | 101 | 101 | from file |
 | `ShopStock.csv` | `P1998_SHOPSTOCK` | 38 | 38 | from file |
 | `ShopBuysFrom.csv` | `P1998_SHOPBUYSFROM` | 46 | 46 | from file |
