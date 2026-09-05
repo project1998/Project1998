@@ -8,7 +8,7 @@ LibrarianNpc,librarian
 MainTutorialNpc,stars_hint
 WarriorTrainerNpc,warrior_trainer|minor_quest|armor_quest
 RogueTrainerNpc,rogue_trainer|minor_quest|armor_quest
-MageTrainerNpc,mage_trainer|minor_quest|sute|armor_quest
+MageTrainerNpc,mage_trainer|minor_quest|sute|armor_quest|mage_stone
 PoetTrainerNpc,poet_trainer|minor_quest|armor_quest
 BloodNpc,forget_secret
 RogueGuildShamanNpc,appearance

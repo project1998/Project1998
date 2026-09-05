@@ -411,6 +411,7 @@ public sealed partial class Session
         TryForage();                         // adjacent apple tree / rose bush -> small chance of an item
         TryGinseng();                        // Guol Tiger Pass ginseng rocks -> young_ginseng (Chu Rua quest)
         TryFoxSpirit();                      // Worn path/trail: 1 step in 10 a fox pops up with a riddle
+        TryMageStoneSpirit();                // Oh-mudum crypt: the dead answer Void's task, once
         if (TryLeviathanHermitDoor()) return;// the Hermit's hut door: in if you freed one, shoved back if not (warps)
         if (TrySuteCaveMouth()) return;      // Buya's north edge: coated -> into Sute's Cave, else shoved back (warps)
         if (TryIceBeastLava()) return;       // Northeast Koguryo lava row: shoes gate + spend-on-return (warps)
@@ -504,6 +505,41 @@ public sealed partial class Session
             Warp(FoxSpirit.FailMap, FoxSpirit.FailX, FoxSpirit.FailY);
         }
         catch (Exception e) { Log.Error($"fox spirit encounter threw for '{_char.Name}' — abandoned, no reward and no penalty", e); }
+    }
+
+    // ---- Mage's Spirit Stone: the crypt spirit (see Server/MageStoneQuest.cs) --------------------
+
+    /// <summary>Void's task, and the only part of the chain that is walked rather than clicked: somewhere in
+    /// the tombs under the Cemetery the dead answer him. RTK puts the encounter in Oh-mudum crypt alone and
+    /// rolls <c>math.random(1,1)</c> for it, i.e. it always fires on the first step taken inside; from the
+    /// player's side that is exactly Atlas's "walk through the tombs until a spirit speaks to you", because
+    /// nothing tells you which of the nine tombs it is.
+    ///
+    /// <para>Gated on having offered Void his mouse, so it cannot fire for someone who has never met him,
+    /// and on the flag being unset, so it fires ONCE. RTK tests <c>mage_stone_met_ghost</c> and sets
+    /// <c>mage_ward_met_ghost</c> — with the two names never meeting, its spirit re-fires on every step
+    /// and its Wand can never be satisfied. One name here, tested and set.</para>
+    ///
+    /// <para>Void asks you to listen, so the flag is set BEFORE the pages open rather than after: a player
+    /// who closes the box halfway has still met the spirit, and there is no second chance in the room to
+    /// give them. Fire-and-forget with the same DialogBusy/ghost guards as the fox — see
+    /// <see cref="TryFoxSpirit"/> for why both matter on a step hook.</para></summary>
+    private void TryMageStoneSpirit()
+    {
+        if (_char.Map != MageStoneQuest.CryptMap) return;
+        if (IsDead || DialogBusy) return;
+        if (QuestStage(MageStoneQuest.ZapReg + "void_mouse") != 1) return;
+        if (QuestStage(MageStoneQuest.GhostReg) != 0) return;
+
+        SetQuestStage(MageStoneQuest.GhostReg, 1);
+        Notify("A spirit appears!");
+        _ = ShowMageStoneSpiritAsync();
+    }
+
+    private async Task ShowMageStoneSpiritAsync()
+    {
+        try { await DlgPush(MageStoneQuest.SpiritLook, MageStoneQuest.SpiritColor, MageStoneQuest.SpiritPages); }
+        catch (Exception e) { Log.Error($"crypt spirit dialog threw for '{_char.Name}' — the task is already credited", e); }
     }
 
     // ---- Leviathan quest: freeing a captive (see Server/LeviathanQuest.cs) -----------------------

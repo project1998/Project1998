@@ -1691,3 +1691,60 @@ function npcs.SageNpc(ctx)
   ctx:setReg(SAGE_TIMER, ctx:now() + SAGE_WAIT)
   ctx:say("Use your spell well, abuse will result in its loss, and you will end up having to learn the spells again from the start.")
 end
+
+-- =====================================================================================================
+-- YIN, YANG AND VOID -- the three prophets of the Mage's Spirit Stone (RTK NPCs/nagnang/
+-- mage_stone_prophets.lua). See Server/MageStoneQuest.cs for the whole chain and its sources.
+--
+-- Three NPCs (NPCs.csv 134/135/136) share the MageStoneProphetsNpc identifier, one to a cell off the
+-- Prophets room (2571/2572/2573), so this branches on npcName() exactly as RTK branches on npc.mapTitle.
+--
+-- The gate is the offering, and nothing else: `zapped_<mouse>` is set by game-data/mob_ai.lua when that
+-- prophet's immortal mouse is struck WHILE VEXED. A prophet whose mouse you have not offered will not
+-- speak to you at all -- which is the only thing stopping you from walking the three cells and collecting
+-- all three tasks without casting anything.
+--
+-- Wand warns that cursing MORE than one mouse before a door also costs you the audience. That is not
+-- enforced: RTK does not enforce it either (its flags are per-mouse, so cursing all three simply sets all
+-- three), no archived source describes what the failure actually looked like, and the only way to make it
+-- stick would be to invent a reset. The line stays in Wand's mouth as the instruction it is.
+
+local MAGE_STONE_MICE = {
+  ["Yin"]  = "yin_mouse",
+  ["Yang"] = "yang_mouse",
+  ["Void"] = "void_mouse",
+}
+
+local MAGE_STONE_WORDS = {
+  ["Yin"] = {
+    "Ah, someone who shows great wisdom and follows simple directions. That speaks well of you.",
+    "You wish to become one of the Nagnang Mages, eh? Well it is more about being a mage at heart than of a town.",
+    "Magic is not about killing and destroying. It is also about compassion and beauty. This is the quest that I bestow upon you.",
+    "Find a rose. That is the simplicity and beauty of my request. Keep that rose with you and give it to Wand when you have done the other's bidding.",
+  },
+  ["Yang"] = {
+    "I see that you have learned your lesson as to how to greet us in the caves. Good. Good.",
+    "So you want the power that comes with the Mages of Nagnang, do you? Well power is what we are about.",
+    "Magic has its soft side but it has the strength and power to destroy and conquer. It can be stronger than any weapon or blade.",
+    "To show this, get yourself a piece of high Ore, and keep it with you until you complete all the other's quests and return to Wand.",
+  },
+  ["Void"] = {
+    "Ah, you had the clarity of mind to follow that which Wand told you. That is good.",
+    "Understanding the void, the absence of everything, is the most important part of being a mage of Nagnang.",
+    "The person who understands the Void better than anyone are the dead. Walk through the graves in the Crypts of the Cemetery and glean their knowledge.",
+    "Afterwards, return to Wand with whatever the others have you find and you will be rewarded with the stone.",
+  },
+}
+
+function npcs.MageStoneProphetsNpc(ctx)
+  local mouse = MAGE_STONE_MICE[ctx:npcName()]
+  if not mouse then return end                    -- a fourth prophet would be a data error, not a silent NPC
+
+  if ctx:reg("zapped_" .. mouse) ~= 1 then
+    ctx:say("You have not shown me an offering. I will not chat with you.")
+    return
+  end
+
+  local w = MAGE_STONE_WORDS[ctx:npcName()]       -- four pages each, indexed rather than unpacked
+  ctx:say(w[1], w[2], w[3], w[4])
+end
