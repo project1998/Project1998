@@ -57,7 +57,7 @@ and `Sources.csv` are extractor output only and are not loaded by the server.
 | `AreaSpawnsCrafting.csv` | `P1998_AREASPAWNS_CRAFT` | 8 | 8 | from file |
 | `ServerTuning.csv` | `P1998_SERVER_TUNING` | 16 | 16 | from file |
 | `EraFeatures.csv` | `P1998_ERA_FEATURES` | 10 | 10 | from file |
-| `NPCs.csv` | `P1998_NPCS` | 368 | 288 | from file |
+| `NPCs.csv` | `P1998_NPCS` | 368 | 289 | from file |
 | `MinorQuests.csv` | `P1998_MINORQUESTS` | 101 | 101 | from file |
 | `ShopStock.csv` | `P1998_SHOPSTOCK` | 38 | 38 | from file |
 | `ShopBuysFrom.csv` | `P1998_SHOPBUYSFROM` | 46 | 46 | from file |
@@ -105,7 +105,7 @@ and `Sources.csv` are extractor output only and are not loaded by the server.
 | `Traps.csv` | `P1998_TRAPS` | 8 | 8 | from file |
 | `Morphs.csv` | `P1998_MORPHS` | 29 | 29 | from file |
 | `SpellMods.csv` | `P1998_SPELL_MODS` | 25 | 25 | from file |
-| `NpcAbilities.csv` | `P1998_NPC_ABILITIES` | 29 | 29 | from file |
+| `NpcAbilities.csv` | `P1998_NPC_ABILITIES` | 30 | 30 | from file |
 | `PathGrowth.csv` | `P1998_PATH_GROWTH` | 5 | 5 | from file |
 | `DoorObjects.csv` | `P1998_DOOR_OBJECTS` | 50 | 50 | from file |
 | `Doors.csv` | `P1998_DOORS` | 8 | 8 | from file |

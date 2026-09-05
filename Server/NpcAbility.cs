@@ -200,6 +200,11 @@ public sealed class NpcContext
     /// <summary>Wipe the kill track — what accepting an alliance does.</summary>
     public void ClearKillTrack() => _s.ClearKillTrack();
 
+    /// <summary>Set this NPC's guards on the player: creatures spawned around HIM, hostile, owned by nobody,
+    /// and gone again after <paramref name="seconds"/>. Master Dagger's answer to a third tap on the
+    /// shoulder. Returns how many landed (a blocked tile is skipped, not stacked).</summary>
+    public int SpawnAmbush(string mobKey, int seconds) => _s.SpawnNpcAmbush(_npc, mobKey, seconds);
+
     /// <summary>Have this NPC cast Rebirth on the player: full heal, and resurrection if they are a ghost.</summary>
     public void CastRebirth() => _s.NpcCastRebirth(_npc.Name);
     /// <summary>Have this NPC cast Stormstrike on the player and send them home to a tavern — the mythic's

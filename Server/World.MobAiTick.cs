@@ -174,7 +174,7 @@ public sealed partial class World
                     }
             }
 
-            // Ownership expiry — two DIFFERENT endings, keyed on Mob.Summoned:
+            // Lifespan expiry — two DIFFERENT endings, keyed on Mob.Summoned:
             //   conjured (CotW pet, Giasomo bird)  -> plain despawn, no kill/loot/exp, same as riding a
             //     mob away (RTK cotw_SpawnSetThreat's spawnTime). DespawnMob does socket I/O so it must
             //     run outside this lock, hence the deferred list.
@@ -182,7 +182,10 @@ public sealed partial class World
             //     just stops being yours: RTK endear's `uncast` is exactly `mob.owner = 0; mob.target = 0`.
             //     Clearing TargetId means it forgets whoever it was fighting FOR you and re-acquires
             //     normally next tick — including you.
-            if (mob.OwnerId != 0 && mob.PetExpiresAt != 0 && Environment.TickCount64 >= mob.PetExpiresAt)
+            // The conjured half does NOT require an owner: a scripted ambush (World.ExpireUnowned — Master
+            // Dagger's assassins) is conjured and timed but belongs to nobody, so it must not fall into the
+            // pet AI below and must still vanish here.
+            if (mob.PetExpiresAt != 0 && Environment.TickCount64 >= mob.PetExpiresAt)
             {
                 if (mob.Summoned) { expiredPets.Add((mapId, mob)); return; }
                 mob.OwnerId = 0; mob.TargetId = 0; mob.TargetMobId = 0; mob.PetExpiresAt = 0;

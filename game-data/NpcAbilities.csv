@@ -7,7 +7,7 @@ FishNpc,fish
 LibrarianNpc,librarian
 MainTutorialNpc,stars_hint
 WarriorTrainerNpc,warrior_trainer|minor_quest|armor_quest
-RogueTrainerNpc,rogue_trainer|minor_quest|armor_quest
+RogueTrainerNpc,rogue_trainer|minor_quest|armor_quest|dagger_uniform
 MageTrainerNpc,mage_trainer|minor_quest|sute|armor_quest
 PoetTrainerNpc,poet_trainer|minor_quest|armor_quest
 BloodNpc,forget_secret
@@ -28,3 +28,4 @@ ClawNpc,tiger_mail
 MythicAllianceNpc,mythic_alliance
 AlignmentNpc,alignment
 SummitNpc,summit
+BlackbirdNpc,dagger_uniform

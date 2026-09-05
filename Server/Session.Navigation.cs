@@ -93,6 +93,36 @@ public sealed partial class Session
         return mob;
     }
 
+    /// <summary>Set a scripted AMBUSH on the player around the NPC they are talking to — Master Dagger's
+    /// three assassins (<see cref="DaggerUniformQuest"/>). These are not pets: nobody owns them, so they
+    /// fight the player like any wild creature, and they leave play on a lifespan
+    /// (<see cref="World.ExpireUnowned"/>) rather than on a dismiss.
+    ///
+    /// <para>The three tiles are RTK's own (<c>rogue_trainer.lua</c>: x-1, x+1, y+1 of the NPC). One that is
+    /// off the map or already occupied is skipped rather than stacked — an assassin buried under another
+    /// assassin is a free ambush. Returns how many actually landed, so a caller can tell.</para></summary>
+    internal int SpawnNpcAmbush(Mob npc, string mobKey, int seconds)
+    {
+        var def = Content.MobByKey(mobKey);
+        if (def is null) { Log.Warn($"ambush mob '{mobKey}' is not in mobs.csv — nothing spawned"); return 0; }
+
+        int spawned = 0;
+        foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, 1) })
+        {
+            int x = npc.X + dx, y = npc.Y + dy;
+            if (x < 0 || y < 0 || x >= _char.MapXs || y >= _char.MapYs) continue;
+            if (_world.MobAt(_char.Map, x, y) is not null) continue;
+
+            var mob = SummonWorldMob(def.Look, (ushort)x, (ushort)y, def.Name, def.Hp, dir: npc.Dir,
+                                     color: def.Color, exp: def.Exp, moveTime: def.MoveTime,
+                                     key: def.Key, def: def);
+            _world.ExpireUnowned(mob, seconds * 1000);
+            spawned++;
+        }
+        Log.Info($"   -> ambush: {spawned} x '{def.Name}' around npc {npc.Id} for {seconds}s");
+        return spawned;
+    }
+
     // ===== navigation: warp + map/mob listing + data-driven summon ==========================
 
     // ---- Mythic Nexus zodiac cave entrances ----
@@ -411,6 +441,7 @@ public sealed partial class Session
         TryForage();                         // adjacent apple tree / rose bush -> small chance of an item
         TryGinseng();                        // Guol Tiger Pass ginseng rocks -> young_ginseng (Chu Rua quest)
         TryFoxSpirit();                      // Worn path/trail: 1 step in 10 a fox pops up with a riddle
+        TryCrowSnatch();                     // Kugnae streets: a crow takes Maro's stolen acorn and flies east
         if (TryLeviathanHermitDoor()) return;// the Hermit's hut door: in if you freed one, shoved back if not (warps)
         if (TrySuteCaveMouth()) return;      // Buya's north edge: coated -> into Sute's Cave, else shoved back (warps)
         if (TryIceBeastLava()) return;       // Northeast Koguryo lava row: shoes gate + spend-on-return (warps)
@@ -504,6 +535,33 @@ public sealed partial class Session
             Warp(FoxSpirit.FailMap, FoxSpirit.FailX, FoxSpirit.FailY);
         }
         catch (Exception e) { Log.Error($"fox spirit encounter threw for '{_char.Name}' — abandoned, no reward and no penalty", e); }
+    }
+
+    // ---- Dagger Uniform: the crow that takes Maro's acorn (see Server/DaggerUniformQuest.cs) ------
+
+    /// <summary>Step out of the Kugnae Rogue Guild with Maro's Silvery acorn on you and a crow takes it.
+    /// RTK runs this from its map-entry hook gated on the same map; a step hook is the same moment on a map
+    /// whose only entrance from the guild is that doorway, and it is what the line itself describes ("as you
+    /// step out into the sunlight"). The theft is therefore unavoidable — which is the point, since the crow
+    /// IS the next step of the quest and not a punishment for being seen.
+    ///
+    /// <para>Order matters: the busy/ghost guards come BEFORE the acorn is taken, so a player mid-dialog
+    /// keeps the acorn and gets the whole beat on their next step rather than losing it unannounced.</para></summary>
+    private void TryCrowSnatch()
+    {
+        if (_char.Map != DaggerUniformQuest.KugnaeMap) return;
+        if (QuestStage(DaggerUniformQuest.Key) != DaggerUniformQuest.Stage.StealAcorn) return;
+        if (IsDead || DialogBusy) return;
+        if (!TakeItem(DaggerUniformQuest.StolenAcorn, 1)) return;
+
+        SetQuestStage(DaggerUniformQuest.Key, DaggerUniformQuest.Stage.CrowTookIt);
+        _ = ShowCrowSnatchAsync();
+    }
+
+    private async Task ShowCrowSnatchAsync()
+    {
+        try { await DlgPush(DaggerUniformQuest.CrowLook, DaggerUniformQuest.CrowColor, DaggerUniformQuest.CrowSnatch); }
+        catch (Exception e) { Log.Error($"crow snatch dialog threw for '{_char.Name}' — the acorn is already gone east", e); }
     }
 
     // ---- Leviathan quest: freeing a captive (see Server/LeviathanQuest.cs) -----------------------

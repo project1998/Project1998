@@ -290,7 +290,7 @@ public sealed partial class Session
         if (peer is not null) { SendMiniText(peer.Snapshot().Name); return; }
 
         var mob = _world.MobAt(_char.Map, tx, ty);
-        if (mob is not null) { SendMiniText(mob.Name); return; }
+        if (mob is not null) { ObserveMob(mob); return; }   // shared with the 0x43 click — see ObserveMob
 
         // Session-local debug dummies (@cre/@mob/@crow/@crecol/look-lab) never join the shared world, so
         // they're invisible to _world.MobAt — check our own dummy list too (e.g. @crecol's "col<N>" labels).

@@ -136,7 +136,7 @@ NpcId,NpcIdentifier,NpcDescription,NpcType,NpcMapId,NpcX,NpcY,NpcTimer,NpcLook,N
 135,MageStoneProphetsNpc,Yang,0,2572,3,6,0,6,10,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 136,MageStoneProphetsNpc,Void,0,2573,3,6,0,6,28,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 137,PoetTrainerNpc,Staff,0,3832,3,6,0,87,7,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-138,RogueTrainerNpc,Dagger,0,3824,3,4,0,100,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+138,RogueTrainerNpc,Dagger,0,2514,9,3,0,100,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
 139,BlackbirdNpc,Blackbird,0,1004,72,4,0,92,0,0,2,0,0,0,0,0,0,0,0,0,0,0,10,2000,0,1,
 140,ValleyFarmGhostNpc,Majhum,0,5930,38,50,0,257,0,0,2,0,0,0,0,0,0,0,0,0,0,0,10,2000,0,1,
 141,BenitnathNpc,Benitnath,0,5928,7,5,0,86,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
