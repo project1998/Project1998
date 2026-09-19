@@ -1840,9 +1840,21 @@ public sealed partial class Session
     /// status. <b>It can never kill</b> — the atlas is explicit that poison brings you to the lowest possible
     /// health and stops, so the damage is clamped to leave 1 HP and <see cref="Die"/> is never reached.
     /// Armour is deliberately not consulted ("disregarding armor class"), and neither is the deduction
-    /// multiplier — this is not a hit, it is the poison already inside you.</summary>
+    /// multiplier — this is not a hit, it is the poison already inside you.
+    /// <para><b>Why the field is read before the monitor.</b> The world heartbeat calls this on EVERY online
+    /// session every beat, and almost none of them are venomed — so taking the monitor first meant the tick
+    /// thread entered 400 session monitors a beat to find nothing to do, and waited behind whichever of them
+    /// a session thread was holding mid-send. <c>_poisonUntil</c> is a <c>long</c>, written only under
+    /// <see cref="EnterState"/> (by <see cref="ReceivePoison"/> and <see cref="CurePoison"/>), and 64-bit
+    /// reads are atomic on every runtime we target; <see cref="Poisoned"/> has always read it unguarded from
+    /// the attack and cast gates. <c>Volatile.Read</c> keeps the JIT from caching or
+    /// reordering it. The one race is benign and deliberate: a venom applied between this read and the
+    /// return makes the tick skip that player for ONE beat (333 ms), never lose them, because
+    /// <c>_poisonNextTick</c> is already a whole gap away and the next beat reads the new value. The
+    /// decision this method acts on is still the guarded one — the test below the monitor is unchanged.</para></summary>
     internal void TickPoison()
     {
+        if (Volatile.Read(ref _poisonUntil) == 0) return;   // the common case: no monitor entered at all
         using var _ = EnterState();   // #29: cross-thread entry into this session's state
         if (_poisonUntil == 0) return;
         if (!Poisoned) { CurePoison(); return; }
@@ -1931,9 +1943,16 @@ public sealed partial class Session
     }
 
     /// <summary>Driven by the world heartbeat: redraw the drowse over a sleeping player, and wake them when
-    /// the timer runs out. (The mob side rides <see cref="Mob.SetFxRepeat"/>; a player has no Mob to hang it on.)</summary>
+    /// the timer runs out. (The mob side rides <see cref="Mob.SetFxRepeat"/>; a player has no Mob to hang it on.)
+    /// <para><b>Why the field is read before the monitor</b> — the same reason and the same rules as
+    /// <see cref="TickPoison"/>, which carries the long note. <c>_sleepUntil</c> is written only under
+    /// <see cref="EnterState"/> (by <see cref="ReceiveSleep"/> and <see cref="WakeUp"/>) and
+    /// <see cref="Asleep"/> already reads it unguarded; a hold applied between this read and the return
+    /// slips its first drowse redraw or its lapse by one beat, because <c>_sleepFxNext</c> is a whole
+    /// repeat interval away when the applier sets it.</para></summary>
     internal void TickSleep()
     {
+        if (Volatile.Read(ref _sleepUntil) == 0) return;   // the common case: no monitor entered at all
         using var _ = EnterState();   // #29: cross-thread entry into this session's state
         if (_sleepUntil == 0) return;
         if (!Asleep) { WakeUp(byDamage: false); return; }
