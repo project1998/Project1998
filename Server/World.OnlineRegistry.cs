@@ -155,26 +155,50 @@ public sealed partial class World
             }
         }
 
+        // #168: accounts whose session tore down moments ago, keyed like _online, with the TickCount64 of the
+        // teardown. A session parks here instead of simply dropping its slot (Depart), so the next login for
+        // the account is handed it (Register) and fences it with the same KickForReplacement a live duplicate
+        // gets: the kick enters the departed session's monitor, which waits out a late group share or a late
+        // death still writing under it, writes the row, and latches _replaced so nothing later can. Kept apart
+        // from _online so the live-slot contract (Unregister's compare-and-remove, HoldsSlotForTest) is exactly
+        // what it was. Pruned by the autosave sweep once an entry is one AutoSaveMs old (AllForSweep), so it
+        // holds at most one session per account for between one and two sweep intervals. Guarded by _lock.
+        private readonly Dictionary<string, (Session Session, long AtMs)> _departed = new();
+
         /// <summary>Duplicate-login guard: atomically register <paramref name="s"/> as the online session for
         /// <paramref name="key"/> (CharacterStore.Key(username)), returning whatever session previously held
         /// that slot via <paramref name="old"/> (null if this is a fresh login). Called from HandleArrival
         /// BEFORE the character is loaded from disk, so a second concurrent arrival for the same account can
         /// never both pass unnoticed — the dictionary write is atomic under _lock. The caller (HandleArrival)
         /// is responsible for kicking <paramref name="old"/> (Session.KickForReplacement) so its state is
-        /// flushed before the new session's own Load runs.</summary>
-        internal void Register(string key, Session s, out Session? old)
+        /// flushed before the new session's own Load runs.
+        ///
+        /// <para>When no live session holds the slot, the session that most recently DEPARTED it (see
+        /// <see cref="Depart"/>) is handed back instead, taken out of the departed table, with
+        /// <paramref name="departed"/> set (#168). The caller fences it with the same kick.</para></summary>
+        internal void RegisterArrival(string key, Session s, out Session? old, out bool departed)
         {
             lock (world._lock)
             {
-                _online.TryGetValue(key, out old);
+                departed = false;
+                if (!_online.TryGetValue(key, out old) && _departed.Remove(key, out var gone))
+                {
+                    old = gone.Session;
+                    departed = true;
+                }
                 _online[key] = s;
             }
         }
 
+        /// <summary><see cref="RegisterArrival"/> for a caller that does not care whether the session handed
+        /// back was live or departed.</summary>
+        internal void Register(string key, Session s, out Session? old) => RegisterArrival(key, s, out old, out _);
+
         /// <summary>Remove <paramref name="s"/> from the online registry, but ONLY if it still owns that slot —
         /// a compare-and-remove so a session that was already kicked/replaced (Register overwrote its
         /// slot with the newer session) can't accidentally evict the session that replaced it when its own
-        /// (now-stale) teardown finally runs.</summary>
+        /// (now-stale) teardown finally runs. The arrival's own refusals give their slot back through here: a
+        /// session that never loaded a character has nothing to fence.</summary>
         internal void Unregister(string key, Session s)
         {
             lock (world._lock)
@@ -182,6 +206,49 @@ public sealed partial class World
                 if (_online.TryGetValue(key, out var cur) && ReferenceEquals(cur, s))
                     _online.Remove(key);
             }
+        }
+
+        /// <summary>The teardown's half of the #168 fence: <see cref="Unregister"/>'s compare-and-remove, and
+        /// the removed session parked in the departed table, stamped <paramref name="nowMs"/>. Only a session
+        /// that still owns the slot parks: one a newer login replaced has already been fenced by that login's
+        /// kick, and parking it would hand a stale session to the NEXT login.</summary>
+        internal void Depart(string key, Session s, long nowMs)
+        {
+            lock (world._lock)
+            {
+                if (_online.TryGetValue(key, out var cur) && ReferenceEquals(cur, s))
+                {
+                    _online.Remove(key);
+                    _departed[key] = (s, nowMs);
+                }
+            }
+        }
+
+        /// <summary><see cref="All"/> for the autosave sweep, which also prunes the departed table in the same
+        /// acquisition of <c>_lock</c>: every entry stamped at or before <c>nowMs - Session.AutoSaveMs</c> is
+        /// dropped. A departed session is off its map, so it is never in the roster this returns.</summary>
+        internal List<Session> AllForSweep(long nowMs)
+        {
+            lock (world._lock)
+            {
+                if (_departed.Count > 0)
+                {
+                    long cutoff = nowMs - Session.AutoSaveMs;
+                    List<string>? stale = null;
+                    foreach (var (key, entry) in _departed)
+                        if (entry.AtMs <= cutoff) (stale ??= new List<string>()).Add(key);
+                    if (stale is not null) foreach (var key in stale) _departed.Remove(key);
+                }
+                return world._maps.Values.SelectMany(m => m.Players).ToList();
+            }
+        }
+
+        /// <summary>Whether <paramref name="s"/> is parked in the departed table under <paramref name="key"/>.
+        /// Reads the same table under the same lock; nothing in production calls it.</summary>
+        internal bool HoldsDepartedForTest(string key, Session s)
+        {
+            lock (world._lock)
+                return _departed.TryGetValue(key, out var entry) && ReferenceEquals(entry.Session, s);
         }
 
         /// <summary>Whether <paramref name="key"/>'s slot is held by <paramref name="s"/> right now — the

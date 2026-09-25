@@ -19,7 +19,7 @@ public sealed partial class World
     /// snapshot and returns; the flushing happens OUTSIDE it, because <see cref="FlushIsolated"/> calls
     /// <c>Session.FlushNow</c>, which enters that session's own state monitor — the inversion rule 1 forbids
     /// (Session.State.cs) — and because a sweep that held <c>_lock</c> across a synchronous SQLite write would
-    /// freeze the world for the length of the sweep. <see cref="Tick"/> and <see cref="SaveAll"/> assert
+    /// freeze the world for the length of the sweep. <see cref="Tick(long)"/> and <see cref="SaveAll"/> assert
     /// <c>!HoldsWorldLock</c> at the top: that only writes down what was already true, since the assert in
     /// <c>Session.EnterState</c> would fire a moment later anyway, but it names the sweep as the offender
     /// instead of naming whichever player happened to be first in the snapshot.</para>
@@ -38,21 +38,30 @@ public sealed partial class World
         /// <summary>Periodic crash-safety backstop (see <see cref="Run"/>): flush every connected player's pending
         /// mutation, regardless of the per-session AutoSaveMs throttle. Its unique job is an IDLE dirty player
         /// (mutated, then stopped sending packets, so their own read-loop FlushIfDue never gets another
-        /// iteration to fire on) — an ACTIVE player is already covered by their own on-thread flush.</summary>
-        internal void Tick()
+        /// iteration to fire on) — an ACTIVE player is already covered by their own on-thread flush.
+        ///
+        /// <para>It also prunes the duplicate-login guard's departed table (#168), inside the one acquisition of
+        /// <c>_lock</c> the roster snapshot already makes: a teardown older than one interval is no longer
+        /// fenced by the next login.</para></summary>
+        internal void Tick() => Tick(Environment.TickCount64);
+
+        /// <summary><see cref="Tick()"/> at a given clock reading, so a test can age the departed table without
+        /// waiting an interval.</summary>
+        internal void Tick(long nowMs)
         {
             Debug.Assert(!world.HoldsWorldLock, LockNote);
-            foreach (var s in world.Online.All()) FlushIsolated(s, "autosave");
+            foreach (var s in world.Online.AllForSweep(nowMs)) FlushIsolated(s, "autosave");
         }
 
         /// <summary>One player's flush, fenced so it can't take the rest of a sweep with it. Before this, one
         /// throw from FlushNow unwound the whole foreach in <see cref="Run"/>'s catch, and every player AFTER the
         /// unlucky one in that snapshot silently missed the interval. Idle dirty players are exactly who the
-        /// sweep exists for (see <see cref="Tick"/>), so a skipped sweep is a real crash-safety hole, not a delay.
+        /// sweep exists for (see <see cref="Tick()"/>), so a skipped sweep is a real crash-safety hole, not a delay.
         ///
         /// <para>The throw it was written for was a collection mutated under the serializer by that player's own
         /// thread; #29 closed that off — FlushNow now serializes a snapshot taken under the session's state
-        /// monitor — so what is left to catch here is a bad disk. The fence stays: "one player's failure must not
+        /// monitor — so what is left to catch here is a value the serializer rejects (the #282 NaN route) or a
+        /// store that throws rather than returning false. The fence stays: "one player's failure must not
         /// cost every later player their interval" is worth keeping whatever the cause.</para>
         ///
         /// <para>Returns whether the flush succeeded, because the two callers face different consequences and

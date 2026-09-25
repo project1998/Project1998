@@ -189,8 +189,9 @@ public sealed partial class Session
     /// <summary>
     /// Force-save now if dirty, ignoring the AutoSaveMs throttle. Used by SaveChar's immediate high-value
     /// saves, World's periodic sweep (idle players), the graceful-shutdown flush (World.AutoSave.SaveAll), a
-    /// GM kick and KickForReplacement — four different threads, which is the whole reason this is shaped the
-    /// way it is.
+    /// GM kick or ban, and the disconnect teardown — several different threads, which is the whole reason this
+    /// is shaped the way it is. (KickForReplacement writes through <see cref="CaptureAndWrite"/> directly and
+    /// unconditionally; see there.) A session a newer login replaced writes nothing through here (#168).
     ///
     /// <para><b>Snapshot under the monitor, write outside it (#29).</b> The capture — dirty check,
     /// CaptureTimedEffects, JSON serialize — happens inside <c>WithState</c>, so the bytes leaving here are a
@@ -211,8 +212,8 @@ public sealed partial class Session
     ///
     /// <para>_dirty is cleared BEFORE the capture (not after), so a mutation that lands WHILE a save is in
     /// flight re-dirties us and is guaranteed to be picked up by the next flush — it can never be silently
-    /// treated as "saved" without actually being captured. If the write fails (a bad disk), _dirty is
-    /// restored so the next flush retries.</para>
+    /// treated as "saved" without actually being captured. If the write fails (a busy or bad database) or the
+    /// capture throws (a value the serializer rejects), _dirty is restored so the next flush retries.</para>
     /// </summary>
     internal void FlushNow()
     {
@@ -243,6 +244,15 @@ public sealed partial class Session
         long seq;
         using (EnterState())
         {
+            // #168: a session a newer login has REPLACED writes its row no more. This is the one chokepoint every
+            // single-session writer goes through (SaveChar, FlushNow, StoreSave, the autosave sweep, the shutdown
+            // flush), so one check here covers a late party share, a late death, a sweep and SaveAll alike. It is
+            // read under the monitor, and KickForReplacement latches it under the same monitor AFTER its own
+            // unconditional write, so the kick's write is the last one this session ever makes: nothing captured
+            // after it can land, and anything captured before it carries an older sequence number and is dropped
+            // at the gate below. True, not false: a refused write is not a failed one, and must not re-dirty.
+            // The trade finalizer's pair write does not come through here; FinalizeTradeLocked refuses for it.
+            if (Volatile.Read(ref _replaced) != 0) return true;
             if (dirtyGated && !_dirty) return true;   // nothing pending
             // Cleared on BOTH paths (#88): whatever was pending is in the snapshot about to be taken, since
             // every mutation happens under this monitor. A mutation after the capture re-dirties us as usual.
@@ -295,18 +305,41 @@ public sealed partial class Session
     /// World's online-session registry for the duplicate-login guard. Only meaningful once _enteredWorld.</summary>
     internal string UserKey => CharacterStore.Key(_char.Name);
 
-    /// <summary>Force this session out because the same account just logged in elsewhere (World.Online.Register
-    /// detected the collision in HandleArrival). Flushes any pending mutation FIRST so the new session's
-    /// upcoming _store.Load sees our latest state, marks us _replaced (so the read-loop's own disconnect
-    /// save — which could otherwise fire moments later with now-stale data — is skipped), then tears the
-    /// connection down. Safe to call from the NEW session's thread: FlushNow's _saveGate serializes against
-    /// anything this (old) session's own thread might concurrently be doing, and CloseConnection is
-    /// idempotent either way.</summary>
+    /// <summary>Force this session out because the same account just logged in elsewhere
+    /// (<c>World.Online.Register</c> handed it to the new session's <c>HandleArrival</c>, live or departed).
+    /// Writes our row FIRST, unconditionally, so the new session's upcoming <c>_store.Load</c> sees our latest
+    /// state; THEN latches <c>_replaced</c>, which refuses every later write from this session (the chokepoint
+    /// in <see cref="CaptureAndWrite"/>, and the teardown's own disconnect save); then tears the connection
+    /// down.
+    ///
+    /// <para><b>Why unconditional (#168).</b> A dirty-gated flush found nothing to do when the autosave sweep
+    /// had already captured us (which clears the flag) but not yet written: the new session then loaded the
+    /// older row and the sweep's write landed after it. The unconditional write takes a newer sequence number
+    /// than any capture before it, so that in-flight write is dropped at the write gate if it arrives later, or
+    /// is overwritten by ours if it arrives first. The cost is one row write per duplicate login.</para>
+    ///
+    /// <para><b>Why the write comes before the latch.</b> The latch refuses writes at the chokepoint, including
+    /// this one; latched first, the kick itself could not write. It is in a <c>finally</c> so a capture that
+    /// throws still latches: the exception leaves here as it always did, and nothing from this session writes
+    /// afterwards.</para>
+    ///
+    /// <para>Safe to call from the NEW session's thread. The state monitor taken here is what serializes
+    /// against anything this (old) session's own thread, a late group share or a late death is doing: they
+    /// all run under it, so the kick waits for them and they see the latch after it. <c>_writeGate</c> only
+    /// orders the database writes. CloseConnection is idempotent, and so is the whole kick on a session that
+    /// has already torn down (the departed-session fence in <c>HandleArrival</c>): its sends are dropped and
+    /// its connection is already closed.</para></summary>
     internal void KickForReplacement()
     {
         using var _ = EnterState();   // #29: cross-thread entry into this session's state
-        Volatile.Write(ref _replaced, 1);
-        FlushNow();
+        try
+        {
+            if (_enteredWorld) CaptureAndWrite(dirtyGated: false);
+        }
+        finally
+        {
+            Volatile.Write(ref _replaced, 1);
+        }
         SendMiniText("You have logged in from another location.");
         CloseConnection("replaced by new login");
     }
@@ -389,6 +422,10 @@ public sealed partial class Session
                 foreach (var m in _party.Members)
                 {
                     if (ReferenceEquals(m, this)) continue;                    // the killer, added above
+                    // #168: a member a newer login has replaced is not paid and does not count toward the
+                    // group's size. Its row is refused anyway (CaptureAndWrite), and counting it only shrank
+                    // everyone else's share. A volatile read, no monitor, like #183's lookups.
+                    if (m.IsReplaced) continue;
                     if (m.IsDead || m.CharMap != mobMap) continue;
                     if (Math.Abs(m.CharX - mobX) > GroupExpRange || Math.Abs(m.CharY - mobY) > GroupExpRange) continue;
                     eligible.Add(m);

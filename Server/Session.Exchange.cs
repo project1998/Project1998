@@ -192,7 +192,10 @@ public partial class Session
         // Refused on BOTH confirms, not only the finalizing one: a latch a dead trade is allowed to set is a
         // second state to reason about for no gain, and the window has to close either way. Same line the
         // cancel and disconnect teardowns use — RTK has no separate walk-away text to port.
-        if (IsDead || other.IsDead || other.CharMap != CharMap)
+        //
+        // #168: a side a newer login has replaced is refused here too, for the early answer. The re-check inside
+        // the pair (FinalizeTradeLocked) is the one that holds, since the kick can land after this read.
+        if (IsDead || other.IsDead || other.CharMap != CharMap || IsReplaced || other.IsReplaced)
         {
             EndTrade(trade, "Exchange cancelled.");
             return;

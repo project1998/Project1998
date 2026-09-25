@@ -56,14 +56,15 @@ public sealed partial class Session
         // Save, tell, drop — ONE critical section on the banned player, the same three statements in the same
         // order as @kick eighty lines down (#29 rule 2, Server/Session.State.cs:25-33). Everything in there is an
         // entry into ANOTHER session's state from the operator's thread: SendMessage writes their _gameInc
-        // (blanket rule 2, not a torn byte — Session.WorldApi.cs:314-315), Disconnect reads their _char.Name for
-        // its log line, and FlushNow serialises their whole character graph.
+        // (blanket rule 2, not a torn byte — the `_gameInc++` note above Session.Send in Session.WorldApi.cs),
+        // Disconnect reads their _char.Name for its log line, and FlushNow serialises their whole character graph.
         //
         // THE FLUSHNOW IS NEW HERE, and it is the one behaviour change on this path. What the ban saved before:
         // nothing at ban time — Disconnect only closes the connection, and the save came later and elsewhere,
         // when the target's own read loop unwound into its finally and ran WithState(TearDownWorldState)
-        // (Session.cs:363), whose last act is `_dirty = true; FlushNow();` (Session.cs:395-396). That still
-        // happens and is still the backstop. What it does NOT give is the guarantee @kick's explicit FlushNow
+        // (Session.EndReadLoopAsync, which RunAsync's finally awaits), whose last act is the fenced
+        // `_dirty = true; FlushNow();` final save at the end of TearDownWorldState. That still happens and is
+        // still the backstop. What it does NOT give is the guarantee @kick's explicit FlushNow
         // gives: a save taken at the INSTANT of the command, inside the same section as the notice and the drop,
         // so nothing of theirs can move between the snapshot and the teardown and nothing is riding on their read
         // loop actually getting to unwind. A ban must not cost the player progress they had earned any more than
@@ -73,15 +74,16 @@ public sealed partial class Session
         // No new lock and no new lock order. FlushNow's own EnterState becomes the re-entrant case (rule 3), so
         // the target's monitor IS held across CaptureAndWrite's lock (_writeGate) section — the nested guard is
         // `default` (Session.State.cs:137) and disposes to nothing (Session.State.cs:175-180). That nesting is
-        // not new: it is KickForReplacement's (Session.CharacterApi.cs:277-283), @kick's, and the one the read
-        // loop's own teardown takes on every ordinary disconnect. Nothing in the tree takes a session monitor
-        // while holding a _writeGate (FlushPair, Session.TimedEffects.cs:152-172, closes its WithStatePair
-        // first), so monitor -> _writeGate cannot cycle. Rule 1 holds: FindPlayer takes and releases World._lock
-        // inside itself (World.OnlineRegistry.cs:45-53) and CloseConnection takes no lock at all. The operator's
-        // own SendLog stays outside, so no peer monitor is held while we report to ourselves. The notice text is
-        // computed OUTSIDE the section too: BanMessageFor opens SQLite and reads the moderation row for the name
-        // we were given (Shared/LoginAuth.cs:105-112), which is none of the target's state, so holding their
-        // monitor across a database open and SELECT buys nothing. Hoisted, the section holds only the target's
+        // not new: it is KickForReplacement's (Session.CharacterApi.cs, around its unconditional write), @kick's,
+        // and the one the read loop's own teardown takes on every ordinary disconnect. Nothing in the tree takes
+        // a session monitor while holding a _writeGate (Session.FlushPair, in Session.TimedEffects.cs, closes its
+        // WithStatePair first), so monitor -> _writeGate cannot cycle. Rule 1 holds: FindPlayer takes and
+        // releases World._lock inside itself (OnlineRegistry.FindPlayer, World.OnlineRegistry.cs) and
+        // CloseConnection takes no lock at all. The operator's own SendLog stays outside, so no peer monitor is
+        // held while we report to ourselves. The notice text is computed OUTSIDE the section too: BanMessageFor
+        // opens SQLite and reads the moderation row for the name we were given (LoginAuth.BanMessageFor,
+        // Shared/LoginAuth.cs), which is none of the target's state, so holding their monitor across a database
+        // open and SELECT buys nothing. Hoisted, the section holds only the target's
         // own work, which is the same shape @kick's sends — a string already in hand.
         var online = _world.Online.FindPlayer(name);
         if (online is not null)
@@ -200,25 +202,25 @@ public sealed partial class Session
 
         // Save, tell, drop — one critical section on the TARGET (#29 rule 2, Server/Session.State.cs), which
         // is exactly what KickForReplacement already does for the duplicate-login eviction
-        // (Session.CharacterApi.cs:277-283: EnterState, FlushNow, a line, CloseConnection). The two halves were
-        // guarded unevenly here: FlushNow enters the monitor for itself to take the snapshot
-        // (Session.CharacterApi.cs:235-249), while the notice and Disconnect's read of their _char.Name for the
-        // log line ran bare from the operator's thread. Entering once around all three closes that and makes
+        // (Session.CharacterApi.cs: EnterState, its unconditional write and then the _replaced latch, a line,
+        // CloseConnection). The two halves were guarded unevenly here: FlushNow enters the monitor for itself to
+        // take the snapshot (FlushNow and CaptureAndWrite in Session.CharacterApi.cs), while the notice and
+        // Disconnect's read of their _char.Name for the log line ran bare from the operator's thread. Entering once around all three closes that and makes
         // the save, the notice and the teardown one section, so nothing of theirs can move between the snapshot
         // and the drop; FlushNow's own EnterState becomes the re-entrant case (rule 3), and that is precisely
         // why the target's monitor IS held across CaptureAndWrite's lock (_writeGate) section: the nested
         // EnterState returns a default guard (Session.State.cs:137) whose Dispose releases nothing
         // (Session.State.cs:175-180), so CaptureAndWrite's own using (EnterState()) exits without dropping
-        // anything and its lock (_writeGate) { _store.SaveJson(...) } (Session.CharacterApi.cs:236-261) runs
+        // anything and its lock (_writeGate) { _store.SaveJson(...) } (CaptureAndWrite's write-gate block) runs
         // with the monitor still held. That is not a new lock order. It is the nesting KickForReplacement has
-        // had all along (Session.CharacterApi.cs:277-283) and the one the read loop's own teardown takes on
-        // every ordinary disconnect (Session.cs:349 WithState(TearDownWorldState), then :382 FlushNow()), and
-        // nothing in the tree takes a session monitor while holding a _writeGate — FlushPair
-        // (Session.TimedEffects.cs:152-172) closes its WithStatePair before taking either gate — so
-        // monitor -> _writeGate cannot cycle. The cost, not a hazard: the kicked player's monitor is held
+        // had all along (KickForReplacement, Session.CharacterApi.cs) and the one the read loop's own teardown
+        // takes on every ordinary disconnect (Session.EndReadLoopAsync's WithState(TearDownWorldState), then the
+        // teardown's final FlushNow()), and nothing in the tree takes a session monitor while holding a
+        // _writeGate — FlushPair (Session.TimedEffects.cs) closes its WithStatePair before taking either gate —
+        // so monitor -> _writeGate cannot cycle. The cost, not a hazard: the kicked player's monitor is held
         // across a synchronous store write, where on master FlushNow released it first. No new
         // lock and no new lock order. Rule 1 holds: FindPlayer takes and releases World._lock inside itself
-        // (World.OnlineRegistry.cs:45-53), and CloseConnection takes no lock at all.
+        // (OnlineRegistry.FindPlayer, World.OnlineRegistry.cs), and CloseConnection takes no lock at all.
         target.WithState(() =>
         {
             // Save before dropping them — a kick must never cost the player progress they'd earned.

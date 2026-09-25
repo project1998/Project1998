@@ -325,6 +325,15 @@ public sealed partial class Session
         // and this would still move the goods. The check has to be inside the pair to mean anything.
         if (trade.Ended) return;
 
+        // #168: nor with a side a newer login has REPLACED. That session's row was just written by the kick and
+        // the new login has loaded it (or is about to), so a finalize here moves goods the new login still holds
+        // in memory: an item O gave would exist twice once the new login saves, one O received would be erased.
+        // Refused before anything moves. This is the check that counts: the kick latches under the replaced
+        // side's monitor, which this pair holds, so the flag cannot change between here and FlushPair. The
+        // confirm gate asks the same question earlier for the early answer. Both sides get the line every
+        // other cancelled exchange gets; the replaced side's send is dropped on its closed connection.
+        if (a.IsReplaced || b.IsReplaced) { EndTrade(trade, "Exchange cancelled."); return; }
+
         uint goldA = Math.Min(trade.OfferA.Gold, a._char.Coins);
         uint goldB = Math.Min(trade.OfferB.Gold, b._char.Coins);
         a._char.Coins = a._char.Coins - goldA + goldB;
