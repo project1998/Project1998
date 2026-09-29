@@ -38,14 +38,56 @@ public static class Db
     /// retry window down below SQLite's own, which would make the pragma unreachable.</summary>
     private const int BusyTimeoutSeconds = (BusyTimeoutMs + 999) / 1000;
 
-    private sealed record Migration(string Table, string Column, string Sql);
+    /// <summary>One schema step: its SQL, and the test for a database that already has it. The test is what
+    /// lets a step meet a database whose <c>CREATE TABLE</c> already declared the change (a fresh one, or a
+    /// deployment older than the <c>user_version</c> stamp) without applying it twice.</summary>
+    private sealed record Migration(string Sql, Func<SqliteConnection, SqliteTransaction, bool> AlreadyApplied);
+
+    private static Migration AddColumn(string table, string column, string sql) =>
+        new(sql, (cn, tx) => ColumnExists(cn, tx, table, column));
 
     private static readonly Migration[] Migrations =
     {
-        new("handoff_tokens", "ip", "ALTER TABLE handoff_tokens ADD COLUMN ip TEXT NOT NULL DEFAULT '';"),
-        new("parcels", "item_owner", "ALTER TABLE parcels ADD COLUMN item_owner TEXT NOT NULL DEFAULT '';"),
-        new("characters", "unreadable_since", "ALTER TABLE characters ADD COLUMN unreadable_since INTEGER;"),
+        AddColumn("handoff_tokens", "ip", "ALTER TABLE handoff_tokens ADD COLUMN ip TEXT NOT NULL DEFAULT '';"),
+        AddColumn("parcels", "item_owner", "ALTER TABLE parcels ADD COLUMN item_owner TEXT NOT NULL DEFAULT '';"),
+        AddColumn("characters", "unreadable_since", "ALTER TABLE characters ADD COLUMN unreadable_since INTEGER;"),
+        new(RekeyHandoffTokens, (cn, tx) => PrimaryKeyIs(cn, tx, "handoff_tokens", "username", "nonce_hash")),
     };
+
+    /// <summary>
+    /// Migration 4: <c>handoff_tokens</c> keyed by <c>(username, nonce_hash)</c> instead of <c>nonce_hash</c>
+    /// alone (the schema comment above says why). SQLite cannot change a primary key in place, so this is its
+    /// documented rebuild: create the new table, copy, drop the old one, rename.
+    ///
+    /// <para>Only rows a consume could still accept are copied: unconsumed and unexpired. Every other row is
+    /// one <c>HandoffTokens.Consume</c> refuses already, and under the old key those rows are exactly what
+    /// blocked later mints, so they are not carried into the new table. A token minted moments before the
+    /// migration is live, is copied, and still enters.</para>
+    ///
+    /// <para>The hash column is copied as it is: the stored hash is the same SHA-256 of the same surviving
+    /// bytes before and after, which is what lets a login server and a game server on either side of this
+    /// migration consume each other's tokens during a deploy (Shared/HandoffTokens, the class summary).</para>
+    ///
+    /// <para>Both processes: this runs inside <see cref="ApplyMigrations"/>' write reservation like every
+    /// step. The first process to start takes the reservation and rebuilds; the other waits on the busy
+    /// timeout, then reads the new version and does nothing. A process that is already running (the one not
+    /// yet restarted) keeps its connections; its next statement on the table re-prepares against the new
+    /// schema, and its statements are the same ones this code uses on the same columns.</para>
+    /// </summary>
+    private const string RekeyHandoffTokens = @"
+CREATE TABLE handoff_tokens_rekeyed (
+  nonce_hash  TEXT NOT NULL,
+  username    TEXT NOT NULL,
+  expires_utc INTEGER NOT NULL,
+  consumed    INTEGER NOT NULL DEFAULT 0,
+  ip          TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (username, nonce_hash)
+);
+INSERT INTO handoff_tokens_rekeyed(nonce_hash, username, expires_utc, consumed, ip)
+  SELECT nonce_hash, username, expires_utc, consumed, ip FROM handoff_tokens
+  WHERE consumed = 0 AND expires_utc > CAST(strftime('%s', 'now') AS INTEGER) AND nonce_hash IS NOT NULL;
+DROP TABLE handoff_tokens;
+ALTER TABLE handoff_tokens_rekeyed RENAME TO handoff_tokens;";
 
     internal static int CurrentSchemaVersion => Migrations.Length;
 
@@ -237,12 +279,18 @@ CREATE TABLE IF NOT EXISTS world_state (
 -- come from the same one. That binding is what carries the security when the nonce itself is short: the
 -- client only echoes back the bytes its fixed-size handoff field has room for after the username, so a
 -- long name leaves as little as one significant byte (see Shared/HandoffTokens).
+--
+-- Keyed by the account AND the hash. The hash covers only the surviving nonce bytes: none at all for an
+-- 11-letter name and one byte of 255 values at 10, so a key of the hash alone was one key shared by every
+-- 11-letter account (255 for every 10-letter one), and a second account's mint collided with the first's
+-- row. Migration 4 rebuilds a table created with that key; the hash itself is unchanged.
 CREATE TABLE IF NOT EXISTS handoff_tokens (
-  nonce_hash  TEXT PRIMARY KEY,
+  nonce_hash  TEXT NOT NULL,
   username    TEXT NOT NULL,
   expires_utc INTEGER NOT NULL,
   consumed    INTEGER NOT NULL DEFAULT 0,
-  ip          TEXT NOT NULL DEFAULT ''
+  ip          TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (username, nonce_hash)
 );
 
 CREATE TABLE IF NOT EXISTS board_posts (
@@ -348,7 +396,7 @@ CREATE TABLE IF NOT EXISTS map_unlocks (
             }
 
             var migration = Migrations[version];
-            if (!ColumnExists(cn, tx, migration.Table, migration.Column))
+            if (!migration.AlreadyApplied(cn, tx))
             {
                 using var alter = cn.CreateCommand();
                 alter.Transaction = tx;
@@ -378,5 +426,23 @@ CREATE TABLE IF NOT EXISTS map_unlocks (
             if (string.Equals(rows.GetString(1), column, StringComparison.OrdinalIgnoreCase))
                 return true;
         return false;
+    }
+
+    /// <summary>Whether <paramref name="table"/>'s primary key is exactly <paramref name="columns"/>, in that
+    /// order (<c>PRAGMA table_info</c>'s <c>pk</c> column numbers the key's columns from 1).</summary>
+    internal static bool PrimaryKeyIs(
+        SqliteConnection cn,
+        SqliteTransaction? tx,
+        string table,
+        params string[] columns)
+    {
+        using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"PRAGMA table_info({table});";
+        var key = new SortedList<long, string>();
+        using var rows = cmd.ExecuteReader();
+        while (rows.Read())
+            if (rows.GetInt64(5) > 0) key.Add(rows.GetInt64(5), rows.GetString(1));
+        return key.Values.SequenceEqual(columns, StringComparer.OrdinalIgnoreCase);
     }
 }
