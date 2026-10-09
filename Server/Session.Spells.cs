@@ -2214,7 +2214,25 @@ public sealed partial class Session
         _pcSpellTarget.SendStats();
     }
     internal void LuaTellTarget(SpellDef sp) { if (_pcSpellTarget is not null) TellTarget(_pcSpellTarget, sp); }
-    internal void LuaFlushTarget()           { if (_pcSpellTarget is null) return; _pcSpellTarget.FlushDurations(); _pcSpellTarget.SendStats(); }
+    internal void LuaFlushTarget()           => _pcSpellTarget?.ReceiveFlush();
+
+    /// <summary>A won Dispell-family cast lands on THIS player (the cleanse verb's <c>flushTarget</c>): strip
+    /// the buff list and the timed stances (<see cref="FlushDurations"/>) and push the stats that show it.
+    /// Cross-session: called on the target's own Session from the caster's thread, which holds the caster's
+    /// monitor and the Lua gate and never <c>World._lock</c>, so this takes the target's monitor here, by
+    /// <c>StateRank</c> like every peer write (<see cref="ReceiveSleep"/>, <see cref="ReceiveParalysis"/>). On
+    /// yourself it is the monitor the cast already holds. The verb decided the cast (its mana and its roll)
+    /// under the caster's monitor; nothing here decides it again.
+    /// <para>Before this the caster's thread ran the target's <c>FlushDurations</c> and <c>SendStats</c> without
+    /// the target's monitor. In a Debug build the <c>_buffs</c> guard fired inside the verb, so the caster read
+    /// "Dispell isn't working right now." with the mana spent and nothing was cleared; in Release it was an
+    /// unguarded write to another session's list (PR #338 re-checks, "Pre-existing").</para></summary>
+    internal void ReceiveFlush()
+    {
+        using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        FlushDurations();
+        SendStats();
+    }
     internal void LuaReviveTarget(SpellDef sp)
     {
         if (_pcSpellTarget is null) return;
@@ -3205,10 +3223,14 @@ public sealed partial class Session
         return _world.PeerAt(_char.Map, fx, fy);
     }
 
-    // RTK's `player:flushDuration()` — strips every active timed spell effect in one shot, buffs and
-    // debuffs alike. We don't yet track true player-targeted debuffs (only mob-targeted freezes), so this
-    // clears every timed mechanic that exists PC-side: stat buffs, rage tiers, the stealth burst, and the
-    // Warrior Backstab/Flank stances.
+    // RTK's `player:flushDuration()`, the write a won Dispell-family cast makes (the cleanse verb). It clears
+    // this player's buff list, every buff and debuff in it (stat buffs, curses, the Human Barrier hold), and
+    // zeroes the fury (rage and the Chung Ryong tier), stealth, Backstab, Flank and four-way timers. It is not
+    // ClearAllTimedEffects: the ward flags (Harden Body), the Sanctuary and Cunning reductions and the enchant
+    // stay, and only @dispel and death clear those (PR #338 re-check 2, F10). Nor does it touch the two holds
+    // that run on timers of their own: a Doze's _sleepUntil and a venom's _poisonUntil keep running after
+    // their slot entries go. Reached from another player's cast only through ReceiveFlush, inside this
+    // player's monitor.
     private void FlushDurations()
     {
         BuffClear();

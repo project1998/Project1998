@@ -377,7 +377,9 @@ public sealed class SpellContext
     public void   setTargetMana(double n) => _s.LuaSetTargetMana((int)System.Math.Round(n));
     /// <summary>Send the resolved target this spell's "&lt;caster&gt; casts &lt;name&gt; on you." (or flavor) line.</summary>
     public void   tellTarget()    => _s.LuaTellTarget(_sp);
-    /// <summary>Strip every timed effect (buffs + debuffs) from the resolved target (RTK flushDuration).</summary>
+    /// <summary>Clear the resolved target's buff list and timed stances (RTK flushDuration; not the ward flags,
+    /// the Sanctuary and Cunning reductions or the enchant), inside the target's own monitor
+    /// (<c>Session.ReceiveFlush</c>).</summary>
     public void   flushTarget()   => _s.LuaFlushTarget();
     /// <summary>Revive the resolved (dead) target in place at full health.</summary>
     public void   reviveTarget()  => _s.LuaReviveTarget(_sp);
