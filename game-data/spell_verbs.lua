@@ -672,8 +672,13 @@ end
 
 -- Mana Steal (RTK poet inspiration): drain a GROUP member's entire mana into your own pool (capped at your max).
 -- No cast cost — the "cost" is taking their mana. Target must be in your party and not a ghost.
+-- Never yourself (Caleb, 2026-10-11: "Refuse self"). You are in your own group whenever you have one, so the group
+-- test alone let a cast at your own id through: setMana(mp + targetMana) then setTargetMana(0) on the same player
+-- left you at 0 with "You cast X." (#341's review, probe P6). Mana Gift's refusal, word for word and at the same
+-- point: "It doesn't work.", nothing spent (RTK inspire.lua:23-26). RTK's inspiration.lua has no self test.
 function verbs.mana_steal(ctx, row)
   if not ctx:pcTarget() then return false end
+  if ctx.targetIsSelf then ctx:say("It doesn't work."); return false end
   if ctx.targetIsDead then ctx:say("That cannot save them now."); return false end
   if not ctx.targetInGroup then ctx:say("They must be in your group."); return false end
   ctx:setMana(ctx.mp + ctx.targetMana)     -- setMana clamps to the caster's max

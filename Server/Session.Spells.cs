@@ -1494,8 +1494,9 @@ public sealed partial class Session
         var fx = Content.FxFor(sp);
         if (fx is not null) BroadcastFx(_char.Id, Content.EffectAnim(fx, sp.PathId), Content.EffectSound(fx, sp.PathId));
     }
-    // TargetBuff resolution + apply (mirror CastTargetBuff): resolve the explicit target (id -> player else mob;
-    // no id -> faced tile: peer else mob), classify for the verb, and apply the buff/deduction the verb chose.
+    // TargetBuff resolution + apply (mirror CastTargetBuff): resolve the explicit target (id -> a player on the
+    // caster's map, else mob; no id, or a player on another map -> faced tile: peer else mob), classify for the
+    // verb, and apply the buff/deduction the verb chose.
     /// <param name="selfIfUnaimedInPvp">Land on the CASTER when nothing else resolves, <b>on a PvP map only</b> —
     /// the rule that makes a hostile self-cast possible at all.
     /// <para>4.95 gives a spell no way to say "me": the client casts with the slot alone, so every targeted
@@ -1515,15 +1516,25 @@ public sealed partial class Session
     /// now stops at the map boundary, matching <see cref="ResolveDamageTarget"/> beat for beat: aimed at
     /// nothing, off a PvP map, a hostile cast resolves to nobody and fails quietly. Inside an arena every
     /// self-status play still works exactly as before.</para></param>
+    /// <remarks>An id reaches only a player on the caster's own map: #342's rule for
+    /// <see cref="ResolvePcCastTarget"/>, which Caleb extended to this resolver on 2026-10-11 (#342's review, F2:
+    /// "Fix as a slice"). The roster lookup used to take an id to a player on any map. From an arena that put a
+    /// curse, a venom or a Doze on a player standing in a town, because every hostile gate here reads the
+    /// caster's map; and a heal, a buff or a ward reached anyone anywhere. A player on another map is now
+    /// answered by the faced tile, as a cast with no id is (the fallback Caleb kept for #342, "Merge as is
+    /// (fallback)"); with nothing faced, the last line answers it as it answers an id that names nobody. The map
+    /// is a bare read of the other session's character, as #342's is.</remarks>
     private void ResolveTargetBuff(uint? targetId, out Session? pc, out Mob? mob, bool selfIfUnaimedInPvp = false)
     {
         pc = null; mob = null;
+        bool byFacedTile = true;
         if (targetId is uint tid && tid != 0)
         {
-            pc = _world.Online.ById(tid);
-            if (pc is null) mob = _world.MobById(_char.Map, tid);
+            var byId = _world.Online.ById(tid);
+            if (byId is null) { mob = _world.MobById(_char.Map, tid); byFacedTile = false; }
+            else if (byId.CharMap == CharMap) { pc = byId; byFacedTile = false; }
         }
-        else
+        if (byFacedTile)
         {
             var (fxT, fyT) = FrontTile();
             pc = _world.PeerAt(_char.Map, fxT, fyT);
@@ -3599,13 +3610,26 @@ public sealed partial class Session
     // can hit both (PvP + self, e.g. sparking yourself in an arena). An explicit target id resolves DIRECTLY to a
     // mob or a player (no faced-tile fallback, so a client-targeted player is never hijacked by a mob you happen
     // to face); with no id we hit the faced tile, mob first then a peer. At most one of (mob, pc) is non-null.
+    //
+    // The one exception: an id reaches only a player on the caster's own map (#342's rule for
+    // ResolvePcCastTarget, extended here by Caleb on 2026-10-11, #342's review F2: "Fix as a slice"). The roster
+    // lookup used to take an id to a player on any map, and HitPlayerWithSpell's PvP gate reads the caster's map,
+    // so a nuke thrown from an arena landed on a player standing in a town. A player on another map is answered
+    // by the faced tile, mob first then a peer, as #342 answers it (Caleb kept that fallback: "Merge as is
+    // (fallback)"); with nothing faced, by no target, as an id that names nobody is. Not by the caster: the PvP
+    // self-fallback below is for a cast aimed at nothing, and this one was aimed. The map is a bare read of the
+    // other session's character, as #342's is.
     private (Mob? mob, Session? pc) ResolveDamageTarget(uint? targetId)
     {
         if (targetId is uint id && id != 0)
         {
             var m = _world.MobById(_char.Map, id);
             if (m is not null) return (m, null);
-            return (null, _world.Online.ById(id));   // player id (incl. your own on a self-cast) — may be null
+            var byId = _world.Online.ById(id);   // player id (incl. your own on a self-cast) — may be null
+            if (byId is null || byId.CharMap == CharMap) return (null, byId);
+            var (ofx, ofy) = FrontTile();
+            var om = _world.MobAt(_char.Map, ofx, ofy);
+            return om is not null ? (om, null) : (null, _world.PeerAt(_char.Map, ofx, ofy));
         }
         var (fx, fy) = FrontTile();
         var fm = _world.MobAt(_char.Map, fx, fy);
