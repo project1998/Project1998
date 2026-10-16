@@ -1271,6 +1271,9 @@ public sealed partial class Session
         // flag (SendStats, flags2 bit 0x10) and a waiting parcel lights the bottom-left bag icon — both are
         // standing indicators, so a minitext on top of them is a duplicate the player didn't ask for.
         Log.Info($"   == world join: map {_char.Map} has {peers.Length} other player(s), {mobs.Length} mob(s) ==");
+        // A vow half the partner's own row no longer names ends here, for free, with its one line (nothing else on
+        // screen says so). Last, once this player is on its map and drawn: see SettleVowHalves for why.
+        SettleVowHalves();
     }
 
     // ---- terrain streaming (opcode 0x06) — BOTH clients ----

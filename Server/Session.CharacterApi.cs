@@ -1121,43 +1121,152 @@ public sealed partial class Session : QuestState.ISessionStore
     /// they never separately visit a Chapel; clearing both sides avoids that permanently-stuck state.
     /// <para>Runs in the clicking player's Chapel dialog, on their read loop and under their monitor. The fiancé
     /// is found by name; if they are offline nothing of theirs is touched, and their saved row keeps its half until
-    /// something else clears it. Each side's half is <see cref="EndEngagement"/>, inside that side's monitor.</para></summary>
+    /// their next login ends it (<see cref="SettleVowHalves"/>). Each side's half is <see cref="EndEngagement"/>,
+    /// inside that side's monitor, and only if it still names the other side (PR #341 review, F1): a fiancé who has
+    /// since got engaged to someone else keeps that engagement, and a half the fiancé already ended is not ended
+    /// again.</para></summary>
     internal void BreakOffEngagement()
     {
-        var fiance = _world.Online.FindPlayer(_char.Fiance);
-        EndEngagement();
-        fiance?.EndEngagement();
+        string fianceName = _char.Fiance;
+        var fiance = string.IsNullOrEmpty(fianceName) ? null : _world.Online.FindPlayer(fianceName);
+        EndEngagement(fianceName);
+        fiance?.EndEngagement(_char.Name);
     }
 
     /// <summary>THIS player's half of a broken engagement: the "engaged" legend and the engagement fields, each
-    /// saved as before. One critical section on this player, taken here (#29). From the clicking player's own
-    /// dialog it is the monitor already held; on the fiancé it is a cross-session entry from the clicker's thread,
-    /// which holds the clicker's monitor and never <c>World._lock</c>, so it is taken by <c>StateRank</c>. Before
-    /// this the clicker's thread wrote the fiancé's legend and engagement without the fiancé's monitor: in a Debug
-    /// build <c>SaveChar</c>'s <c>_char</c> guard (a <c>Debug.Assert</c>, which ends a game process) fired, and in
-    /// Release it was an unguarded write.</summary>
-    internal void EndEngagement()
+    /// saved as before, but only while this player's fiancé is <paramref name="with"/>. Returns whether it ended
+    /// anything.
+    /// <para>One critical section on this player, taken here (#29). From the clicking player's own dialog it is the
+    /// monitor already held; on the fiancé it is a cross-session entry from the clicker's thread, which holds the
+    /// clicker's monitor and never <c>World._lock</c>, so it is taken by <c>StateRank</c>. The fiancé is read inside
+    /// that section, so the check and the clear are one decision on this player's own state.</para>
+    /// <para>Why the check (PR #341 review, F1; Caleb, 2026-10-11, rule 1): the half the clicker's partner holds can
+    /// be stale. A broke it off while B was offline, so B's row kept "engaged to A"; A got engaged to C; B came back
+    /// and broke off with A, and B's call cleared A's engagement to C on A's side only. Now a half that names someone
+    /// else, or nobody, is not touched. The clicker's own half takes the same check against the name it read a moment
+    /// before under its own monitor, so it ends unless it is already empty.</para></summary>
+    internal bool EndEngagement(string with)
     {
         using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        if (!VowNames(_char.Fiance, with)) return false;
         RemoveLegend("engaged"); ClearEngagement();
+        return true;
     }
 
-    /// <summary>Finalize a divorce on BOTH sides (same "don't dangle the other party" reasoning, and the same
-    /// offline rule, as <see cref="BreakOffEngagement"/>). Each side's half is <see cref="EndMarriage"/>.</summary>
+    /// <summary>Finalize a divorce on BOTH sides (same "don't dangle the other party" reasoning, the same offline
+    /// rule and the same name check, as <see cref="BreakOffEngagement"/>). Each side's half is
+    /// <see cref="EndMarriage"/>.</summary>
     internal void FinishDivorce()
     {
-        var spouse = _world.Online.FindPlayer(_char.Spouse);
-        EndMarriage();
-        spouse?.EndMarriage();
+        string spouseName = _char.Spouse;
+        var spouse = string.IsNullOrEmpty(spouseName) ? null : _world.Online.FindPlayer(spouseName);
+        EndMarriage(spouseName);
+        spouse?.EndMarriage(_char.Name);
     }
 
     /// <summary>THIS player's half of a divorce: the "married" legend, the spouse and one love keepsake, each saved
-    /// as before, in one critical section on this player taken here (the <see cref="EndEngagement"/> shape and
-    /// reasons).</summary>
-    internal void EndMarriage()
+    /// as before, but only while this player's spouse is <paramref name="with"/>; in one critical section on this
+    /// player taken here (the <see cref="EndEngagement"/> shape, check and reasons). Returns whether it ended
+    /// anything. The check is also what keeps a second keepsake: the Chapel sells the same "love" item, and a half
+    /// run twice (the partner's answer and the player's own crossing at the Chapel) took a bought one.</summary>
+    internal bool EndMarriage(string with)
     {
         using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        if (!VowNames(_char.Spouse, with)) return false;
         RemoveLegend("married"); SetSpouse(""); TakeItem("love", 1);
+        return true;
+    }
+
+    /// <summary>Does a vow half (a fiancé or spouse name) name <paramref name="name"/>? An empty half names nobody.
+    /// Case-insensitive, as <c>World.Online.FindPlayer</c> matches the same name when the Chapel looks the partner
+    /// up.</summary>
+    private static bool VowNames(string half, string name) =>
+        !string.IsNullOrEmpty(half) && string.Equals(half, name, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// End, at login and for free, any vow half whose partner no longer names this player back (PR #341 review, F1;
+    /// Caleb, 2026-10-11, rule 2). The arrival's last step (<c>HandleArrival</c>).
+    ///
+    /// <para><b>Why.</b> The Chapel ends both halves when the partner is online and only the clicker's when they are
+    /// not, so an offline partner's row keeps "engaged to A" or "married to A" after A has ended it. Nothing read that
+    /// row again: the player logged in still vowed, nobody could propose to them, and the Chapel charged them the full
+    /// price to end a vow the other side had already ended.</para>
+    ///
+    /// <para><b>The decision.</b> For the fiancé and then the spouse, if this player names one: an online partner is
+    /// found by name (<c>FindPlayer</c>, which takes and releases <c>World._lock</c>) and read inside their monitor,
+    /// entered by <c>StateRank</c> the way the Chapel's own writes into them are; an offline one is read from their
+    /// saved row through this session's store, the same <c>CharacterStore.Load</c> the arrival loaded this player
+    /// with. The half ends when the partner's matching name (fiancé for an engagement, spouse for a marriage) is not
+    /// this player, or when the partner has no row. A consistent pair is untouched and costs no write. A row that
+    /// cannot be read (unreadable or storage unavailable) is no evidence either way, so the half is kept and the next
+    /// login asks again.</para>
+    ///
+    /// <para><b>The end</b> is <see cref="EndEngagement"/> or <see cref="EndMarriage"/>, so it is the Chapel's
+    /// own clear (the legend, the name, one keepsake, each saved), with no charge, and it re-checks that this player
+    /// still names that partner. It is followed by one status line, the channel the wedding's own "I now pronounce
+    /// you (married)" uses: 4.95 shows a vow only as a legend mark on the profile's third page, so without it the mark
+    /// and the keepsake vanish with nothing saying why (the client prints its own "Love removed." for the
+    /// keepsake).</para>
+    ///
+    /// <para><b>Why last.</b> By now this session is on its map and fully drawn, as at the end of any handler. Entering
+    /// an online partner's monitor can drop this one's while it waits (<c>EnterState</c>'s descending case), which is
+    /// the gap every peer write already has; before the map entry it would open on a session no map holds yet. And the
+    /// keepsake's removal is a <c>0x10</c> for a bag the client has already been sent. It also closes the race with
+    /// the partner's own Chapel visit: this player is findable before it reads the partner, and the partner's visit
+    /// looks this player up and clears its own half in one critical section on the partner, so either the visit finds
+    /// this player or this read sees the visit's result.</para>
+    ///
+    /// <para><b>Locks</b> (docs/common/Locking.md). This session's monitor is held throughout (the arrival runs under
+    /// it), as it is across the arrival's own row load; the partner's row is read under nothing else. An online
+    /// partner's monitor is held only for the two-field read, which does no I/O. The ends save under this monitor,
+    /// rows 2 then 4, as any handler's save. No new lock and no schema change. A partner row the store cannot parse is
+    /// marked unreadable by <c>Load</c> itself, the marker that partner's own login would set.</para>
+    /// </summary>
+    private void SettleVowHalves()
+    {
+        SettleVowHalf(married: false);
+        SettleVowHalf(married: true);
+    }
+
+    private void SettleVowHalf(bool married)
+    {
+        string partner = married ? _char.Spouse : _char.Fiance;
+        if (string.IsNullOrEmpty(partner)) return;
+        string me = _char.Name;
+        string kind = married ? "marriage" : "engagement";
+
+        bool? namesBack;
+        string where;
+        var online = _world.Online.FindPlayer(partner);
+        if (online is not null && !ReferenceEquals(online, this))
+        {
+            using (online.EnterState())   // #29: a read of another session's state, by StateRank
+                namesBack = VowNames(married ? online.CharSpouseName : online.CharFiance, me);
+            where = "online";
+        }
+        else
+        {
+            var row = _store.Load(partner);
+            namesBack = row.Status switch
+            {
+                CharacterLoadStatus.Ok       => VowNames(married ? row.Character!.Spouse : row.Character!.Fiance, me),
+                CharacterLoadStatus.NotFound => false,
+                _                            => null,
+            };
+            where = $"row {row.Status}";
+        }
+
+        if (namesBack is null)
+        {
+            Log.Info($"   -> ARRIVAL: '{me}' keeps its {kind} to '{partner}': that partner's row could not be read ({where})");
+            return;
+        }
+        if (namesBack.Value) return;
+
+        bool ended = married ? EndMarriage(partner) : EndEngagement(partner);
+        if (!ended) return;   // the partner's own Chapel visit ended it meanwhile, from inside this monitor's gap
+        Log.Info($"   -> ARRIVAL: '{me}' was in a {kind} with '{partner}' ({where}), who no longer names them back — ended, free");
+        SendMiniText($"Your {kind} to {partner} has ended.");
     }
 
     /// <summary>Spend coin if the player can afford it (refresh HUD + persist); false, unchanged, if they can't.</summary>

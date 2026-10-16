@@ -691,8 +691,8 @@ public sealed class PeerWritesLockTests
 
     /// <summary>Today's offline path, kept: when the partner is not online the Chapel clears the clicking player only,
     /// and the partner's saved row is left byte for byte as it was. (<c>FindPlayer</c> finds nobody, so nothing of the
-    /// partner's is touched; their legend, fiancé or spouse and keepsake stay until something else clears them.) Not a
-    /// guard: green on 93b079c and after, in both builds.</summary>
+    /// partner's is touched; their legend, fiancé or spouse and keepsake stay until their next login ends them, which
+    /// <see cref="VowHalvesTests"/> pins.) Not a guard: green on 93b079c and after, in both builds.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -858,14 +858,14 @@ public sealed class PeerWritesLockTests
             Assert.True(low.StateRank < v.StateRank && v.StateRank < high.StateRank);
 
             Vow(v, low, divorce);
-            var wrongWay = Record.Exception(() => _fx.World.UnderWorldLockForTest(() => EndVow(v, divorce)));
+            var wrongWay = Record.Exception(() => _fx.World.UnderWorldLockForTest(() => EndVow(v, low.CharName, divorce)));
             AssertLockOrderFired(wrongWay);
             Assert.True(Vowed(v, low.CharName, divorce), "the vow was cleared under the world lock");
 
-            Assert.Null(Record.Exception(() => low.WithState(() => EndVow(v, divorce))));
+            Assert.Null(Record.Exception(() => low.WithState(() => EndVow(v, low.CharName, divorce))));
             v.WithState(() => Assert.True(Unvowed(v, divorce)));
             Vow(v, high, divorce);
-            Assert.Null(Record.Exception(() => high.WithState(() => EndVow(v, divorce))));
+            Assert.Null(Record.Exception(() => high.WithState(() => EndVow(v, high.CharName, divorce))));
             v.WithState(() => Assert.True(Unvowed(v, divorce)));
         }
         finally
@@ -874,10 +874,12 @@ public sealed class PeerWritesLockTests
         }
     }
 
-    private static void EndVow(Session s, bool married)
+    /// <summary>End <paramref name="s"/>'s half of a vow to <paramref name="with"/>: the half names the partner
+    /// it ends with (the name check added for the PR #341 review, F1).</summary>
+    private static void EndVow(Session s, string with, bool married)
     {
-        if (married) s.EndMarriage();
-        else s.EndEngagement();
+        if (married) s.EndMarriage(with);
+        else s.EndEngagement(with);
     }
 #endif
 
