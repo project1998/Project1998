@@ -837,17 +837,16 @@ public sealed partial class Session
         if (target is null) return;
         if (ReferenceEquals(target, this)) { Refuse("You're already right here."); return; }
 
-        // A peer's character is directly reachable — private is type-scoped, and the reader is a Session too
-        // (same as LuaHealTarget reading pc._char). No accessor needed.
-        ushort map = target._char.Map, xs = target._char.MapXs, ys = target._char.MapYs;
+        // The target's map, its size and their tile, read whole inside the target's monitor (PlaceForPeer, which the
+        // Approach spell shares): read bare, a target mid-warp could give the new map with the old tile.
+        var (map, xs, ys, tx, ty) = target.PlaceForPeer();
         string mapName = Content.TryMap(map, out var md) ? md.Name : "Nexus";
         // The free-tile search used to happen here, in ApproachTile, through a World.PeerAt and a World.MobAt
         // that each took and released the world lock — and the tile it picked was then written by EnterMap
         // under no lock at all. It is now ArrivalPolicy.AdjacentFreeElseStack, which runs the same search and
         // the write in one acquisition (#99 part 1). Same predicates, same N/E/S/W order, same stack-on-them
         // fallback when they are boxed in.
-        var (x, y) = EnterMap(map, xs, ys, target._char.X, target._char.Y, mapName,
-                              ArrivalPolicy.AdjacentFreeElseStack);
+        var (x, y) = EnterMap(map, xs, ys, tx, ty, mapName, ArrivalPolicy.AdjacentFreeElseStack);
         Reply($"Approached {target._char.Name} on {mapName} at ({_char.X},{_char.Y}).");
         Log.Info($"   -> @approach '{_char.Name}' -> '{target._char.Name}' at map {map} ({x},{y})");
     }

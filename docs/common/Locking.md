@@ -122,8 +122,10 @@ timer tick, which synchronises otherwise-independent threads (contended fraction
   copy of the timed buffs). The owner builds it under its OWN monitor and publishes it with one `Volatile.Write`:
   `InvalidateEquipTotals` at each gear change and the four `_buffs` writers, or its own first `Totals()` read
   (compare-exchange against null). Anyone reads it with one `Volatile.Read` and no monitor. Another session's
-  read (`PeerTotals`: the PvP swing's `SwingTarget.Of`, `LuaTargetArmor`, divination) never walks the owner's
-  equipment or buff lists; it runs on a thread that holds its own monitor, and entering the target's there
-  would nest a second session monitor. A peer that finds nothing published reads zero totals and logs it; a
-  session on a map cannot be in that state, because arrival's first `SendStats` publishes before `EnterMap`
-  (PR #286 review F2).
+  read (`PeerTotals`: the PvP swing's `SwingTarget.Of`, `LuaTargetArmor`, divination; and the slot checks a
+  caster makes of its target, `HasStatusCategory` and `HasStatusFromSpell`, which read the snapshot's copy of
+  each buff's category and spell key) never walks the owner's equipment or buff lists; it runs on a thread that
+  holds its own monitor, and entering the target's there would nest a second session monitor. A peer that finds
+  nothing published reads zero totals and logs it; a session on a map cannot be in that state, because arrival's
+  first `SendStats` publishes before `EnterMap` (PR #286 review F2). The slot checks read no buffs then, which is
+  what the list holds: nothing is published only while no buff was ever added.

@@ -693,7 +693,9 @@ function verbs.mana_gift(ctx, row)
   if ctx.mp < cost then ctx:say("Not enough mana."); return false end
   local give = math.min(ctx.mp, ctx.targetMaxMana - ctx.targetMana)
   ctx:setMana(ctx.mp - give)
-  ctx:setTargetMana(ctx.targetMana + give)
+  -- An add, not a set: the target's new mana is decided inside the target's own monitor, so a regen beat that
+  -- lands after the read above is kept rather than overwritten (PR #341's review, probe P4).
+  ctx:addTargetMana(give)
   ctx:tellTarget()
   ctx:fx(6, 22)
   return true

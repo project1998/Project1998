@@ -591,17 +591,25 @@ public sealed partial class Session
     private void PublishTotals((int hp, int mp, int might, int will, int grace, int armor, int hit, int dam) equip,
         BuffTerm[] buffs) => Volatile.Write(ref _equipTotals, new TotalsSnapshot(equip, buffs));
 
-    /// <summary>The live buff list as the snapshot keeps it: the three fields a total reads, copied, so nothing
-    /// a peer reads is an object this session's list still holds. The list is a handful of entries.</summary>
+    /// <summary>The live buff list as the snapshot keeps it: the three fields a total reads and the two a slot check
+    /// reads (<see cref="HasStatusCategory"/>, <see cref="HasStatusFromSpell"/>), copied, so nothing a peer reads is an
+    /// object this session's list still holds. The list is a handful of entries.</summary>
     private BuffTerm[] CopyBuffs()
     {
         if (_buffs.Count == 0) return Array.Empty<BuffTerm>();
         var terms = new BuffTerm[_buffs.Count];
-        for (int i = 0; i < terms.Length; i++) { var b = _buffs[i]; terms[i] = new BuffTerm(b.Stat, b.Amount, b.Expires); }
+        for (int i = 0; i < terms.Length; i++)
+        { var b = _buffs[i]; terms[i] = new BuffTerm(b.Stat, b.Amount, b.Expires, b.Category, b.Key); }
         return terms;
     }
 
-    private readonly record struct BuffTerm(string Stat, int Amount, long Expires);
+    private readonly record struct BuffTerm(string Stat, int Amount, long Expires, string Category, string Key);
+
+    /// <summary>The timed buffs as this session last published them, for a slot check made from a thread that does not
+    /// hold this session's monitor (another player's cast). Every <c>_buffs</c> writer republishes before it returns,
+    /// under the monitor it asserts, so this is one whole published state, never a list mid-write. Nothing published
+    /// means no buff was ever added (<see cref="BuffAdd"/> publishes), so the list is empty too.</summary>
+    private BuffTerm[] PublishedBuffs() => Volatile.Read(ref _equipTotals)?.Buffs ?? Array.Empty<BuffTerm>();
 
     /// <summary>One published state of this session's gear and timed buffs. Immutable: built whole by the owner
     /// under its monitor, published by one reference write (<see cref="PublishTotals"/>), never changed after.</summary>

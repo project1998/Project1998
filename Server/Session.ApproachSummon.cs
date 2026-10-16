@@ -54,16 +54,30 @@ public sealed partial class Session
 
     /// <summary>Approach's move: this caster to the first free cardinal tile beside the resolved target (N, E, S,
     /// W), else onto the target's own tile. <c>ApproachCmd</c>'s call, argument for argument: the target's map,
-    /// its dimensions and tile read off their character directly, as the command reads them.</summary>
+    /// its dimensions and tile, read whole by <see cref="PlaceForPeer"/>, as the command reads them.</summary>
     internal bool LuaApproachTarget(SpellDef sp)
     {
         if (_pcSpellTarget is not { } target) return false;
-        ushort map = target._char.Map, xs = target._char.MapXs, ys = target._char.MapYs;
+        var (map, xs, ys, tx, ty) = target.PlaceForPeer();
         string mapName = Content.TryMap(map, out var md) ? md.Name : "Nexus";
-        var (x, y) = EnterMap(map, xs, ys, target._char.X, target._char.Y, mapName,
-                              ArrivalPolicy.AdjacentFreeElseStack);
+        var (x, y) = EnterMap(map, xs, ys, tx, ty, mapName, ArrivalPolicy.AdjacentFreeElseStack);
         Log.Info($"      {sp.Name}(lua): '{_char.Name}' -> '{target._char.Name}' at map {map} ({x},{y})");
         return true;
+    }
+
+    /// <summary>Where THIS player stands, for another player's move to them (<c>@approach</c> and the Approach
+    /// spell): the map, its dimensions and the tile, read in one section inside this player's monitor (#29), taken
+    /// by <c>StateRank</c>. The mover's thread holds the mover's monitor (and, for the spell, the Lua gate) and never
+    /// <c>World._lock</c>; <c>FindPlayer</c> releases it before it returns.
+    /// <para>A warp writes the five as one critical section on this player (<see cref="EnterMap"/>: the map and its
+    /// dimensions first, then the tile through <c>World.PlacePlayer</c>), and a walk writes the tile under the same
+    /// monitor. Read bare, a mover could take the new map with the old tile, and land on that tile clamped onto the
+    /// new map, where this player never stood, or the new tile on the old map. Read here, the mover lands beside where
+    /// this player was at one moment, or where they are now.</para></summary>
+    internal (ushort Map, ushort Xs, ushort Ys, ushort X, ushort Y) PlaceForPeer()
+    {
+        using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        return (_char.Map, _char.MapXs, _char.MapYs, _char.X, _char.Y);
     }
 
     /// <summary>Summon's move: the resolved target to the first free cardinal tile beside this caster, else onto

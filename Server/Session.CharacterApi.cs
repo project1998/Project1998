@@ -450,7 +450,8 @@ public sealed partial class Session : QuestState.ISessionStore
     }
 
     /// <summary>A saved text key off the live character: a bare map read with no monitor, as the string
-    /// registry's read always was. Mentorship reads a protégé's from the mentor's thread this way.</summary>
+    /// registry's read always was. Mentorship reads a protégé's from the mentor's thread inside the protégé's
+    /// monitor, taken by the caller (<c>RunMentorAsync</c>).</summary>
     string QuestState.ISessionStore.ReadText(string savedKey) => QuestState.ReadText(_char, savedKey);
 
     /// <summary>A saved text key written and saved. It takes no monitor of its own, as the string registry's

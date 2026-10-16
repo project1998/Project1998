@@ -26,6 +26,8 @@ internal static class SpellCastSupport
         typeof(Session).GetField("_rageUntil", BindingFlags.Instance | BindingFlags.NonPublic)!;
     private static readonly FieldInfo BuffsField =
         typeof(Session).GetField("_buffs", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    private static readonly MethodInfo PublishBuffTotals =
+        typeof(Session).GetMethod("PublishBuffTotals", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     /// <summary>The 0x0F cast frame for 0-based book <paramref name="slot"/> (RTK clif_parsemagic,
     /// <c>Session.HandleCast</c>): the slot byte (slot + 1), then, for a "Which target? &gt;" spell, the target's
@@ -105,7 +107,11 @@ internal static class SpellCastSupport
     /// <summary>Move the deadline of every <c>_buffs</c> entry under <paramref name="key"/> one millisecond into the
     /// past, which is where the clock would put it at the end of its run, so the next beat's
     /// <c>ExpireBuffs</c> drops it. The entry is changed in place, under the session's monitor, without the list
-    /// writers: their hints stay where the cast left them, as they would until that beat.</summary>
+    /// writers: their hints stay where the cast left them, as they would until that beat.
+    /// <para>The published copy of the buffs (the totals snapshot, which another player's slot checks and the totals
+    /// read) is republished from the list, so it says what the list says, as a real clock moving past the deadline
+    /// would leave both. Production never changes an entry in place; only this seam does, so only this seam has to
+    /// keep the copy in step.</para></summary>
     public static void EndBuff(Session session, string key)
     {
         session.WithState(() =>
@@ -113,6 +119,7 @@ internal static class SpellCastSupport
             foreach (var entry in (System.Collections.IEnumerable)BuffsField.GetValue(session)!)
                 if ((string)Field(entry, "Key") == key)
                     entry.GetType().GetField("Expires")!.SetValue(entry, Environment.TickCount64 - 1);
+            PublishBuffTotals.Invoke(session, null);
         });
     }
 

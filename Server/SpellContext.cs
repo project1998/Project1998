@@ -375,6 +375,10 @@ public sealed class SpellContext
     public double targetWill      => _s.LuaTargetWill;
     /// <summary>Set the resolved target's mana (clamped to their [0, maxMp]).</summary>
     public void   setTargetMana(double n) => _s.LuaSetTargetMana((int)System.Math.Round(n));
+    /// <summary>Add to the resolved target's mana (clamped to their [0, maxMp]), decided inside the target's own
+    /// monitor from the mana they hold then (<c>Session.ReceiveAddMana</c>), so what lands there after the verb's
+    /// read of <see cref="targetMana"/> is kept.</summary>
+    public void   addTargetMana(double n) => _s.LuaAddTargetMana((int)System.Math.Round(n));
     /// <summary>Send the resolved target this spell's "&lt;caster&gt; casts &lt;name&gt; on you." (or flavor) line.</summary>
     public void   tellTarget()    => _s.LuaTellTarget(_sp);
     /// <summary>Clear the resolved target's buff list and timed stances (RTK flushDuration; not the ward flags,

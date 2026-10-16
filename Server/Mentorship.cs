@@ -79,13 +79,21 @@ public sealed partial class Session
         { SendMiniText($"{target.Snapshot().Name} must be near you when you ask to mentor."); return; }
 
         string them = target.Snapshot().Name;
-        bool mine = string.Equals(target.Quest(Mentorship.Key).GetText(Mentorship.MentorSlot), _char.Name,
-                                  StringComparison.OrdinalIgnoreCase);
+        // Everything the checks below ask of the protégé, read in one section inside the protégé's monitor (#29):
+        // their mentor slot, their level and whether they have been mentored. This runs on the MENTOR's thread (the
+        // reply that resumed it, under the mentor's monitor; never World._lock), so the protégé's is taken by
+        // StateRank. Before this the reads were bare: the walk of the protégé's legends threw "Collection was
+        // modified" when their own handler edited the list, and the conversation died with nothing said.
+        var (mentorOf, level, mentored) = target.WithState(() => (
+            target.Quest(Mentorship.Key).GetText(Mentorship.MentorSlot),
+            target.CharLevel,
+            target.HasLegend(Mentorship.MentoredByLegend)));
+        bool mine = string.Equals(mentorOf, _char.Name, StringComparison.OrdinalIgnoreCase);
 
         // ---- culminate: this is already your protégé -------------------------------------------
         if (mine)
         {
-            if (target.CharLevel < Mentorship.CulminateLevel)
+            if (level < Mentorship.CulminateLevel)
             { SendMiniText($"You may complete your mentorship of {them} at level {Mentorship.CulminateLevel}."); return; }
 
             int done = await DlgMenu(MarriageVirtualNpc,
@@ -126,11 +134,11 @@ public sealed partial class Session
         }
 
         // ---- offer: everything that disqualifies a new protégé ----------------------------------
-        if (target.HasLegend(Mentorship.MentoredByLegend))
+        if (mentored)
         { SendMiniText($"{them} has already been mentored!"); return; }
-        if (target.Quest(Mentorship.Key).GetText(Mentorship.MentorSlot).Length > 0)
+        if (mentorOf.Length > 0)
         { SendMiniText($"{them} is already being mentored by someone else!"); return; }
-        if (target.CharLevel < Mentorship.MinProtegeLevel || target.CharLevel > Mentorship.MaxProtegeLevel)
+        if (level < Mentorship.MinProtegeLevel || level > Mentorship.MaxProtegeLevel)
         {
             SendMiniText($"{them} must be between the levels of {Mentorship.MinProtegeLevel} and " +
                          $"{Mentorship.MaxProtegeLevel} to accept a mentor.");

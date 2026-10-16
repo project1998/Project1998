@@ -227,8 +227,7 @@ public sealed partial class Session
         // nobody is speaking here, the room is. Awaited one at a time so PREVIOUS/NEXT paginate for real.
         foreach (var page in cave.Pages)
         {
-            SendScriptMessageP(_char.Id, page, DialogPortrait.None, prev: false, next: true);
-            await AwaitReply();
+            await AwaitReply(() => SendScriptMessageP(_char.Id, page, DialogPortrait.None, prev: false, next: true));
             if (_char.Map != startMap) return;   // a GM warp / death / another dialog moved them mid-read
         }
 
@@ -311,11 +310,10 @@ public sealed partial class Session
     private async Task RunForeverTreeEntryAsync()
     {
         ushort startMap = _char.Map;
-        SendScriptMessageP(_char.Id,
+        await AwaitReply(() => SendScriptMessageP(_char.Id,
             "You spot a crevasse leading into a sandy area. Deathly screeches echo from within. A sense of " +
             "doom overcomes you; you realize that only the truly mighty could survive in there.",
-            DialogPortrait.None, prev: false, next: true);
-        await AwaitReply();
+            DialogPortrait.None, prev: false, next: true));
         if (_char.Map != startMap) return;   // a GM warp / death / another dialog moved them mid-read
         if (!Content.TryMap(ForeverTreeMap, out var dm) || dm is null) { SendXy(); return; }
         Log.Info($"   -> FOREVER TREE entrance -> map {ForeverTreeMap} '{dm.Name}' (21,16) for {_char.Name}");

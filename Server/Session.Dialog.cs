@@ -419,8 +419,12 @@ public sealed partial class Session
     // (Shop, Bank, Transport, …) declared in NpcScripts; its own definition holds only what's unique to it.
     // The flow is async: a behaviour awaits each prompt and the client's 0x3A reply (HandleNpcDialog)
     // completes that await, so behaviours read as linear code (menu -> branch -> loop) rather than a
-    // callback tree — mirroring RTK's coroutine scripts. Everything runs on the read thread (the reply
-    // completes the TaskCompletionSource inline), so it never races the session's other state.
+    // callback tree — mirroring RTK's coroutine scripts. A reply resumes its behaviour on the thread that
+    // delivered it (HandleNpcDialog completes the TaskCompletionSource inline, under Handle's monitor). That
+    // is usually this player's own read loop, but not always: a proposal, a mentorship offer and the
+    // wedding's question are opened on ANOTHER player from the asker's thread, and the ceremony then resumes
+    // on the fiancé's. So a prompt opens inside its owner's monitor (AwaitReply), as every other write into
+    // a session's state does (#29).
     private readonly record struct DialogReply(byte Kind, int Step, int MenuIndex, string Input);
     private TaskCompletionSource<DialogReply>? _dlgReply;   // the prompt currently awaiting a 0x3A reply
 
@@ -612,8 +616,7 @@ public sealed partial class Session
     // Each sends a 0x30 and awaits the client's 0x3A. A menu returns the 1-based pick (0 = cancelled).
     internal async Task<int> DlgMenu(Mob npc, string prompt, IReadOnlyList<string> options)
     {
-        SendNpcMenu(npc, prompt, options);
-        var r = await AwaitReply();
+        var r = await AwaitReply(() => SendNpcMenu(npc, prompt, options));
         return r.Kind == 0x02 ? r.MenuIndex : 0;
     }
 
@@ -623,8 +626,7 @@ public sealed partial class Session
     /// preview a purchase). Used by AppearanceAbility's Change Face browse.</summary>
     internal async Task<int> DlgMenuFace(Mob npc, string prompt, IReadOnlyList<string> options, int face)
     {
-        SendNpcMenuP(npc, DialogPortrait.Player(SelfAppearance(face), npc), prompt, options);
-        var r = await AwaitReply();
+        var r = await AwaitReply(() => SendNpcMenuP(npc, DialogPortrait.Player(SelfAppearance(face), npc), prompt, options));
         return r.Kind == 0x02 ? r.MenuIndex : 0;
     }
 
@@ -632,8 +634,8 @@ public sealed partial class Session
     {
         // next:true gives the box a "continue" affordance — the click the client answers with a 0x3A that
         // resumes this await. A prev/next-less box has "nothing to do": dismissing it sends no reply and hangs.
-        SendScriptMessage(npc.Id, text, NpcPortrait(npc), npc.Color, next: true);
-        await AwaitReply();   // hold the script until the player advances the box
+        // Awaited: hold the script until the player advances the box.
+        await AwaitReply(() => SendScriptMessage(npc.Id, text, NpcPortrait(npc), npc.Color, next: true));
     }
 
     // Free-text input box. Returns the typed string, or null if the player cancelled. The client confirms a
@@ -641,8 +643,7 @@ public sealed partial class Session
     // a cancel/close.
     internal async Task<string?> DlgInput(Mob npc, string prompt)
     {
-        SendInputBox(npc, prompt);
-        var r = await AwaitReply();
+        var r = await AwaitReply(() => SendInputBox(npc, prompt));
         return r.Kind == 0x04 && r.Step == 0x02 ? r.Input : null;
     }
 
@@ -668,8 +669,7 @@ public sealed partial class Session
         var p = DialogPortrait.Look(look, color);
         foreach (var page in pages)
         {
-            SendScriptMessageP(_char.Id, page, p, prev: false, next: true);
-            await AwaitReply();
+            await AwaitReply(() => SendScriptMessageP(_char.Id, page, p, prev: false, next: true));
         }
     }
 
@@ -678,15 +678,33 @@ public sealed partial class Session
     /// entity-id and portrait reasoning as DlgPush. Returns the typed string, or null if they cancelled.</summary>
     internal async Task<string?> DlgInputPush(int look, int color, string prompt)
     {
-        SendInputBox(_char.Id, DialogPortrait.Look(look, color), prompt);
-        var r = await AwaitReply();
+        var r = await AwaitReply(() => SendInputBox(_char.Id, DialogPortrait.Look(look, color), prompt));
         return r.Kind == 0x04 && r.Step == 0x02 ? r.Input : null;
     }
 
-    private Task<DialogReply> AwaitReply()
+    /// <summary>Open a prompt on THIS player: <paramref name="send"/> sends its 0x30, and the reply it waits for
+    /// becomes the pending one. A new prompt orphans any previous pending one (it is GC'd and never resumes).
+    /// <para>The two are one critical section inside this player's monitor, taken here at the definition (#29):
+    /// <see cref="HandleNpcDialog"/> reads and clears the pending reply under the same monitor, and the box the
+    /// player sees has to be the one their next 0x3A answers. From this player's own handler or dialog it is the
+    /// monitor already held. Four prompts are opened on ANOTHER player: the proposal
+    /// (<see cref="PromptProposal"/>, from the proposer's thread), the mentorship offer
+    /// (<see cref="PromptMentorship"/>, the mentor's), the wedding's question (<see cref="RunMarriageCeremony"/>,
+    /// the bride's) and the Chapel's closing box to the bride (from the fiancé's thread, where the ceremony
+    /// resumes). Those threads hold the asker's monitor and never <c>World._lock</c>, so this takes the owner's by
+    /// <c>StateRank</c>. Not held across the await: the reply resumes the behaviour on the thread that delivers it.</para>
+    /// <para>Before this the asker's thread sent the box and set the pending reply without the owner's monitor,
+    /// while the owner's read loop could be answering the box before it, so the swap could land in the middle of
+    /// the owner's own handler. A reply the owner took just before the swap and cleared just after it lost the new
+    /// prompt: its box stayed up and answered nothing. A box the owner's own dialog opened between the asker's send
+    /// and the asker's swap was on screen, while the reply it waited for was the asker's. No guard covers
+    /// <c>_dlgReply</c>, so this was unguarded in both builds.</para></summary>
+    private Task<DialogReply> AwaitReply(Action send)
     {
+        using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        send();
         var tcs = new TaskCompletionSource<DialogReply>();
-        _dlgReply = tcs;      // a new click orphans any previous pending prompt (it's GC'd, never resumes)
+        _dlgReply = tcs;
         return tcs.Task;
     }
 
@@ -1587,8 +1605,7 @@ public sealed partial class Session
         // way (moreFlag -> the next arrow). The last page's "next" click simply ends the sequence.
         foreach (var page in pages)
         {
-            SendScriptMessageP(npc.Id, page, p, prev: false, next: true);
-            await AwaitReply();
+            await AwaitReply(() => SendScriptMessageP(npc.Id, page, p, prev: false, next: true));
         }
     }
     internal Task DlgSayNpc(Mob npc, IReadOnlyList<string> pages)  => DlgSeq(npc, DialogPortrait.Npc(npc), pages);
@@ -2014,8 +2031,17 @@ public sealed partial class Session
     // the target's own character/equipment, which is legal to read cross-instance here since WeaponLook,
     // ShieldLook, ProfileCellIcon and GearListText are all private instance methods of this same Session
     // class — calling target.WeaponLook() runs them against the target's own _char, not the viewer's.
+    //
+    // Legal to read, but not without the target's monitor (#29). The card walks the target's legends and worn
+    // gear and copies their scalars, on the VIEWER's thread (the 0x43 handler or @click, under the viewer's
+    // monitor), while the target's own handler edits those lists under the target's. Before this it read them
+    // bare: an edit landing mid-walk threw "Collection was modified", which Handle's guard turns into a dropped
+    // packet, so the click showed nothing. The whole card is now read inside the target's monitor, taken by
+    // StateRank; on yourself it is the monitor already held. Never World._lock: ById and FindPlayer release it
+    // before they return.
     private void SendClickProfile(Session target)
     {
+        using var _ = target.EnterState();   // #29: cross-thread entry into this session's state
         var tc = target._char;
         var d = new List<byte>();
 
