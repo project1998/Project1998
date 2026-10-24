@@ -429,7 +429,14 @@ public static partial class Content
     /// <para>Dog spells are NOT here and must not be added: "The guildmaster is not involved in these spells"
     /// (nexusatlas Dog Spells listing) — the class's Dog teaches them itself, in exchange for kills and goods.
     /// They carry <c>SplPthId</c> 99, which no class filter matches, so they drop out of this list naturally;
-    /// see <see cref="CanLearnDogSpells"/> and the <c>DogLinguistNpc</c> handler in npc_dialog.lua.</para></summary>
+    /// see <see cref="CanLearnDogSpells"/> and the <c>DogLinguistNpc</c> handler in npc_dialog.lua.</para>
+    /// <para>An NPC subpath's own spell (Chung ryong's rage, Baekho's cunning, Ju jak evocation, Hyun moo revival;
+    /// <c>SplPthId</c> 6-9) is offered to that subpath and to no other path. Its learn row is keyed to the BASE
+    /// class, because the trainer reads the fee with the base path (<see cref="NpcContext.BasePathId"/>), and
+    /// without this guard that row would also offer the spell to every player of the base class. RTK draws the same
+    /// line: an NPC subpath learns its base class's list plus its own spells, everyone else the base list
+    /// (<c>Scripts/Spells.lua</c>, <c>Player.learnSpell</c>). PC-subpath spells (<c>SplPthId</c> 10-21) are not
+    /// this guard's: none has a learn row, and who teaches them is a separate rule.</para></summary>
     public static List<SpellDef> SpellsForClass(int pathId, int maxLevel, int alignment, int mark = 0)
     {
         // An NPC subpath IS its base class plus a little: a Chung ryong learns the whole Warrior list (the
@@ -443,6 +450,7 @@ public static partial class Content
         return Spells.Where(s => (s.Alignment < 0 || s.Alignment == alignment) && s.Mark <= mark)
               .Select(s =>
                     isSubpath && s.PathId == pathId ? s with { Level = MarkSpellLevel }   // the subpath's own signature spell; you only get there at the cap
+                  : IsNpcSubpath(s.PathId) ? null                  // ANOTHER path's NPC-subpath spell: never offered (see the summary)
                   : IsUniversalBaseSpell(s) ? s                    // taught to EVERY class at its base level; SpellCosts rows are relearn-cost only
                   : SpellCosts.TryGetValue(s.Key, out var perClass)
                       ? (perClass.TryGetValue(basePath, out var cost) ? s with { Level = cost.Level } : null)

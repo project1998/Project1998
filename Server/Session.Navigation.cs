@@ -438,6 +438,7 @@ public sealed partial class Session
         TryMageStoneSpirit();                // Oh-mudum crypt: the dead answer Void's task, once
         TryForeverBranch();                  // Forever Tree ground: 1 step in 100 turns up a Forever branch
         TryCrowSnatch();                     // Kugnae streets: a crow takes Maro's stolen acorn and flies east
+        TryWatcherBlessing();                // Buya's north-west field: 1 step in 50 the Watcher's rabbit looks at you
         if (TryLeviathanHermitDoor()) return;// the Hermit's hut door: in if you freed one, shoved back if not (warps)
         if (TrySuteCaveMouth()) return;      // Buya's north edge: coated -> into Sute's Cave, else shoved back (warps)
         if (TryGauntletEntrance()) return;   // Nagnang's west alcove: on the shield trial -> the Gauntlet, else shoved back
@@ -598,6 +599,44 @@ public sealed partial class Session
     {
         try { await DlgPush(DaggerUniformQuest.CrowLook, DaggerUniformQuest.CrowColor, DaggerUniformQuest.CrowSnatch); }
         catch (Exception e) { Log.Error($"crow snatch dialog threw for '{_char.Name}' — the acorn is already gone east", e); }
+    }
+
+    // ---- The Watcher's blessing (onScriptedTilesQuest.lua; see Server/NpcSubpathQuest.cs) --------
+
+    /// <summary>Buya's north-west field, the first step of joining an NPC subpath: one step in fifty a rabbit
+    /// watches you, and with Ox karma it smiles and you are blessed (RTK's <c>blessed_by_watcher</c>, which Baek
+    /// asks for). Below Ox it only bounds away, and once blessed you see it no more. RTK checks no level. The
+    /// field test runs first, because it is the cheap one and this runs on every step.</summary>
+    private void TryWatcherBlessing()
+    {
+        if (!NpcSubpathQuest.InWatcherField(_char.Map, _char.X, _char.Y)) return;
+        WatcherStep(QuestRandom(NpcSubpathQuest.WatcherOddsOneIn));
+    }
+
+    /// <summary>One step's encounter with its roll already made: <paramref name="roll"/> is RTK's
+    /// <c>math.random(1, 50)</c>, and only 1 finds the rabbit. Split from the roll so a fact can choose it.
+    ///
+    /// <para>The flag is set before the box opens, so a player who closes it is still blessed. Fire-and-forget,
+    /// with the busy and ghost guards every dialog on a step hook has (see <see cref="TryFoxSpirit"/>): a box over
+    /// an open conversation would orphan it, and a ghost is skipped as the fox skips one.</para></summary>
+    internal void WatcherStep(int roll)
+    {
+        if (!NpcSubpathQuest.InWatcherField(_char.Map, _char.X, _char.Y)) return;
+        if (IsDead || DialogBusy) return;
+        if (roll != 1) return;
+        var registry = Quest(QuestState.Registry);
+        if (registry.Get(NpcSubpathQuest.BlessedReg) != 0) return;
+
+        bool smiles = Karma.Meets(_char.Karma, NpcSubpathQuest.BlessingKarma);
+        if (smiles) registry.Set(NpcSubpathQuest.BlessedReg, 1);
+        Log.Info($"   -> WATCHER at ({_char.X},{_char.Y}) for {_char.Name}: {(smiles ? "blessed" : "karma below ox, not blessed")}");
+        _ = ShowWatcherAsync(smiles ? NpcSubpathQuest.WatcherSmiles : NpcSubpathQuest.WatcherBoundsAway);
+    }
+
+    private async Task ShowWatcherAsync(string line)
+    {
+        try { await DlgPush(NpcSubpathQuest.WatcherLook, NpcSubpathQuest.WatcherColor, new[] { line }); }
+        catch (Exception e) { Log.Error($"Watcher dialog threw for '{_char.Name}' — the blessing, if any, is already set", e); }
     }
 
     // ---- Leviathan quest: freeing a captive (see Server/LeviathanQuest.cs) -----------------------

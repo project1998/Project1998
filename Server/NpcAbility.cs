@@ -316,6 +316,22 @@ public sealed class NpcContext
     public int BasePathId => _s.CharBasePathId;
     /// <summary>Set the player's path (RTK updatePath) — changes the profile class line, persists.</summary>
     public void SetClass(int pathId) => _s.SetCharClass(pathId);
+    /// <summary>What the player is called now, class plus rank (RTK <c>player.classNameMark</c>): Session.ClassTitle.</summary>
+    public string ClassTitle => _s.ClassTitle;
+
+    /// <summary>The Dog's cleanse leaving an NPC subpath (RTK dog_linguist.lua <c>cleanse</c>,
+    /// <c>player:updatePath(player.baseClass, player.mark)</c>): a Chung ryong, Baekho, Ju jak or Hyun moo goes back
+    /// to its base class, rank kept. Any other path is left as it is. RTK's call is unconditional, so it would also
+    /// return a PC subpath to its base; this one does not, because leaving a PC subpath belongs to the PC-subpath
+    /// rules (<c>@subpath leave</c>, wherever PC subpaths can be held), not to the Dog. True if the path
+    /// changed.</summary>
+    public bool LeaveNpcSubpath()
+    {
+        int cls = _s.CharClassId;
+        if (!Content.IsNpcSubpath(cls)) return false;
+        _s.SetCharClass(Content.PathBaseOf(cls));
+        return true;
+    }
 
     // ---- sub-alignment (AlignmentAbility / SummitAbility; RTK swapAlignment.lua) ------------------
     /// <summary>The player's sub-alignment (0 Unaligned · 1 Kwi-Sin · 2 Ming-Ken · 3 Ohaeng).</summary>

@@ -8,7 +8,7 @@
 --   input (returns the typed string, or nil if cancelled).
 -- Immediate ops (no wait): giveItem/takeItem/hasItem/countItem/itemName, learnSpell/hasSpell/forgetSpell,
 --   awardExp/awardGold, stage/setStage, reg/setReg, hasLegend/addLegend/removeLegend, warp,
---   level/maxHp/maxMp/sex/nation/setNation/map/coins/spendGold, classId/basePathId/canLearnDogSpells,
+--   level/maxHp/maxMp/sex/nation/setNation/map/coins/spendGold, classId/basePathId/canLearnDogSpells/leaveNpcSubpath,
 --   npcName, killCount/totalKills/mounted, eraHas, bubble/notify, gameDate, now,
 --   karma/karmaLevel/karmaCheck/addKarma/removeKarma/karmaTooLow.
 -- To expose a new primitive: add a stub here AND a case in Server/NpcScript.cs Dispatch. Edit this file and run
@@ -68,6 +68,9 @@ function __make_ctx()
   function ctx:classId()                return coroutine.yield({op="classId"}) end
   function ctx:basePathId()             return coroutine.yield({op="basePathId"}) end
   function ctx:canLearnDogSpells()      return coroutine.yield({op="canLearnDogSpells"}) end
+  -- the Dog's cleanse: an NPC subpath goes back to its base class, rank kept (true if it moved). Anyone else
+  -- stays as they are; C# owns which paths move (NpcContext.LeaveNpcSubpath).
+  function ctx:leaveNpcSubpath()        return coroutine.yield({op="leaveNpcSubpath"}) end
   -- this NPC's display name -- needed when several NPCs share one identifier (the four Dogs).
   function ctx:npcName()                return coroutine.yield({op="npcName"}) end
   function ctx:killCount(key)           return coroutine.yield({op="killCount", key=key}) end
@@ -1177,7 +1180,10 @@ end
 -- on this server, while NPC subpaths keep their dog spells (Content.CanLearnDogSpells). So the commitment
 -- prompt is dropped and only the undo remains. Like RTK -- and like the live game its comments say it was
 -- checked against -- it takes the SPELLS and the karma but leaves the legend: you are still a linguist,
--- you have just given the secrets back.
+-- you have just given the secrets back. And as RTK's does, it is how a player LEAVES an NPC subpath: a
+-- Chung ryong, Baekho, Ju jak or Hyun moo goes back to the base class, rank kept (RTK updatePath(baseClass,
+-- mark); tswolf 2001's "Leaving an NPC Subpath": say Cleanse to your path's dog, and it takes "ALL your NPC
+-- Subpath and Dog Spells"). Joining is Baek's (Server/NpcSubpathQuest.cs).
 
 local DOG_LEGEND = "dog_linguist"          -- legend id, also the chain-progress registry key
 local DOG_FLAG   = "dog_flag"              -- Content.DogFlagReg -- set once the chain is finished
@@ -1392,6 +1398,7 @@ local function dog_cleanse(ctx, dog)
   end
   for _, key in ipairs(CLEANSE_ALSO) do ctx:forgetSpell(key) end
   ctx:removeKarma(CLEANSE_KARMA)
+  ctx:leaveNpcSubpath()              -- RTK updatePath(player.baseClass, player.mark): an NPC subpath leaves here
   ctx:say("It is done.")
 end
 

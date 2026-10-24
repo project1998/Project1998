@@ -590,3 +590,7 @@ suppress_mage,3,99,250000,,,,,,,,,extrapolated-from-ee-san
 souls_freedom_warrior,1,99,600000,blood,1,spike,1,,,,,atlas-warrior-spells|archive-spells-warrior
 lifes_end_warrior,1,99,600000,blood,1,spike,1,,,,,atlas-warrior-spells|archive-spells-warrior
 winter_chill_warrior,1,99,600000,blood,1,spike,1,,,,,atlas-warrior-spells|archive-spells-warrior
+chung_ryongs_rage,1,99,50000,spike,1,chung_ryong_key,1,electra,1,,,tswolf-2001-spells-npc
+baekhos_cunning,2,99,50000,baekho_key,1,blood,1,lucky_silver_coin,1,,,tswolf-2001-spells-npc
+ju_jak_evocation,3,99,50000,surge,1,ju_jak_key,1,star_staff,1,,,tswolf-2001-spells-npc
+hyun_moo_revival,4,99,50000,purified_water,1,hyun_moo_key,1,titanium_lance,1,,,tswolf-2001-spells-npc
