@@ -1232,7 +1232,8 @@ end
 -- times current vitality in damage at 0 AC", Mana Cost 3,000, Aethers 38 Seconds (live rogue page); Siege "leaves the
 -- caster with 25% vita left. Damage to target is 1.875 times current vitality plus 0.5 current mana at 0 AC", Mana
 -- Cost 8,000, Aethers 43 Seconds (live warrior page, fetched 2026-10-21). Siege's three alignment names run the same
--- branch. Before this both fell to the `else` arms: 60 mana, a 60 s wait, 0 damage (raised to 1) and no vita cost.
+-- branch, and so do Focused Blow's (Burial dance, Flowing energy, Freeform; Caleb, 2026-10-24, decision sheet item 7).
+-- Before this both fell to the `else` arms: 60 mana, a 60 s wait, 0 damage (raised to 1) and no vita cost.
 -- Their overkill still takes the ctx:overflow arm below, unchanged. That is off at our date; whether Focused Blow, a
 -- rogue strike, refunded or splashed at a later era no source says, so it is left for that era's own decision.
 function verbs.sacrifice(ctx, row)
@@ -1319,7 +1320,8 @@ end
 -- HandleCast prints no "You cast X." line and plays no pose. Today only Wind master (cotw_wind_master_poet): the
 -- live Nexus Atlas poet page says "Summons a ??? vita creature", RTK has no script for it and mobs.csv no
 -- creature, so it routed to `misc` and charged 10 mana and an 8-minute wait for nothing (Caleb, 2026-10-21,
--- decision sheet item 3: not castable until a source names its creature).
+-- decision sheet item 3: not castable until a source names its creature). Its three alignment names on that page
+-- (Kwi-Sin master, Ming-Ken master, Ohaeng master) are bound here the same way (decision sheet item 7, 2026-10-24).
 function verbs.not_castable(ctx, row)
   return false
 end

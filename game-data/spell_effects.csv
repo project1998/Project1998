@@ -642,3 +642,30 @@ ju_jak_evocation,npcsub,Utility,0,,,,,,,,,,37,4,6,
 souls_freedom_warrior,warrior,Damage,8000,math.ceil(player.health * 1.875) + math.ceil(player.magic * 0.5),spellFX,,,,,,,,,,1,
 lifes_end_warrior,warrior,Damage,8000,math.ceil(player.health * 1.875) + math.ceil(player.magic * 0.5),spellFX,,,,,,,,,,1,
 winter_chill_warrior,warrior,Damage,8000,math.ceil(player.health * 1.875) + math.ceil(player.magic * 0.5),spellFX,,,,,,,,,,1,
+mending_of_the_soul_warrior,warrior,Heal,1000,1200,0,,,,,,,,5,4,,
+spirits_salvation_warrior,warrior,Heal,1000,1200,0,,,,,,,,5,4,,
+gift_of_life_warrior,warrior,Heal,1000,1200,0,,,,,,,,5,4,,
+restore_equipment_warrior,warrior,Utility,50000,,,,,,,,,,-1,,6,
+luster_return_warrior,warrior,Utility,50000,,,,,,,,,,-1,,6,
+reforge_warrior,warrior,Utility,50000,,,,,,,,,,-1,,6,
+kwisin_explorers_remedy_rogue,rogue,Heal,4000,6000,0,,,,,,,,5,4,,
+mingken_explorers_remedy_rogue,rogue,Heal,4000,6000,0,,,,,,,,5,4,,
+ohaeng_explorers_remedy_rogue,rogue,Heal,4000,6000,0,,,,,,,,5,4,,
+burial_dance_rogue,rogue,Damage,3000,player.health * 2,spellFX,,,,,,,,7,88,1,
+flowing_energy_rogue,rogue,Damage,3000,player.health * 2,spellFX,,,,,,,,7,88,1,
+freeform_rogue,rogue,Damage,3000,player.health * 2,spellFX,,,,,,,,7,88,1,
+phantoms_kiss_rogue,rogue,Heal,1000,1500,0,,,,,,,,5,4,,
+life_herbs_rogue,rogue,Heal,1000,1500,0,,,,,,,,5,4,,
+meditation_rogue,rogue,Heal,1000,1500,0,,,,,,,,5,4,,
+deaths_awakening_mage,mage,Damage,15275,math.ceil(player.magic * 2.5),30,,,,,,,,8,88,6,65000
+soul_rip_mage,mage,Damage,15275,math.ceil(player.magic * 2.5),30,,,,,,,,8,88,6,65000
+final_blow_mage,mage,Damage,15275,math.ceil(player.magic * 2.5),30,,,,,,,,8,88,6,65000
+spirit_heal_mage,mage,Heal,2400,8000,0,,,,,,,,5,4,,
+natures_milk_mage,mage,Heal,2400,8000,0,,,,,,,,5,4,,
+peaceful_bliss_mage,mage,Heal,2400,8000,0,,,,,,,,5,4,,
+vital_charge_poet,poet,Heal,3000,40000,0,,,,,,,,5,4,,
+blessing_of_life_poet,poet,Heal,3000,40000,0,,,,,,,,5,4,,
+sacred_soil_poet,poet,Heal,3000,40000,0,,,,,,,,5,4,,
+kwisin_master_poet,poet,Utility,10,,,,,,,,,,-1,22,6,480000
+mingken_master_poet,poet,Utility,10,,,,,,,,,,-1,22,6,480000
+ohaeng_master_poet,poet,Utility,10,,,,,,,,,,-1,22,6,480000

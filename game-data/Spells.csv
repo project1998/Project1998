@@ -926,3 +926,33 @@ SplId,SplIdentifier,SplDescription,SplType,SplPthId,SplAlignment,SplMark,SplLeve
 1098,souls_freedom_warrior,Soul\'s Freedom,5,1,1,3,0,,0,0,0,1,0,1
 1099,lifes_end_warrior,Life\'s End,5,1,2,3,0,,0,0,0,1,0,1
 1100,winter_chill_warrior,Winter Chill,5,1,3,3,0,,0,0,0,1,0,1
+1101,mending_of_the_soul_warrior,Mending of the Soul,5,1,1,3,0,,0,0,0,1,0,1
+1102,spirits_salvation_warrior,Spirit\'s Salvation,5,1,2,3,0,,0,0,0,1,0,1
+1103,gift_of_life_warrior,Gift of Life,5,1,3,3,0,,0,0,0,1,0,1
+1104,restore_equipment_warrior,Restore Equipment,5,1,1,3,0,,0,0,0,1,0,1
+1105,luster_return_warrior,Luster Return,5,1,2,3,0,,0,0,0,1,0,1
+1106,reforge_warrior,Reforge,5,1,3,3,0,,0,0,0,1,0,1
+2129,burial_dance_rogue,Burial Dance,5,2,1,3,0,,0,0,0,1,0,1
+2130,flowing_energy_rogue,Flowing Energy,5,2,2,3,0,,0,0,0,1,0,1
+2131,freeform_rogue,Freeform,5,2,3,3,0,,0,0,0,1,0,1
+2132,kwisin_explorers_remedy_rogue,Kwi-Sin Explorers Remedy,5,2,1,3,0,,0,0,0,1,0,1
+2133,mingken_explorers_remedy_rogue,Ming Ken Explorers Remedy,5,2,2,3,0,,0,0,0,1,0,1
+2134,ohaeng_explorers_remedy_rogue,Ohaeng Explorers Remedy,5,2,3,3,0,,0,0,0,1,0,1
+2135,phantoms_kiss_rogue,Phantoms Kiss,2,2,1,3,0,Which target? >,0,0,0,1,0,1
+2136,life_herbs_rogue,Life Herbs,2,2,2,3,0,Which target? >,0,0,0,1,0,1
+2137,meditation_rogue,Meditation,2,2,3,3,0,Which target? >,0,0,0,1,0,1
+3171,deaths_awakening_mage,Deaths Awakening,2,3,1,3,0,Which target? >,0,0,0,1,0,1
+3172,soul_rip_mage,Soul Rip,2,3,2,3,0,Which target? >,0,0,0,1,0,1
+3173,final_blow_mage,Final Blow,2,3,3,3,0,Which target? >,0,0,0,1,0,1
+3174,spirit_heal_mage,Spirit Heal,2,3,1,3,0,Which target? >,0,0,0,1,0,1
+3175,natures_milk_mage,Natures Milk,2,3,2,3,0,Which target? >,0,0,0,1,0,1
+3176,peaceful_bliss_mage,Peaceful Bliss,2,3,3,3,0,Which target? >,0,0,0,1,0,1
+4163,spirit_shield_poet,Spirit Shield,2,4,1,3,0,Which target? >,0,0,0,1,0,1
+4164,soul_guard_poet,Soul Guard,2,4,2,3,0,Which target? >,0,0,0,1,0,1
+4165,rock_blessing_poet,Rock Blessing,2,4,3,3,0,Which target? >,0,0,0,1,0,1
+4166,vital_charge_poet,Vital Charge,2,4,1,3,0,Which target? >,0,0,0,1,0,1
+4167,blessing_of_life_poet,Blessing of Life,2,4,2,3,0,Which target? >,0,0,0,1,0,1
+4168,sacred_soil_poet,Sacred Soil,2,4,3,3,0,Which target? >,0,0,0,1,0,1
+4730,kwisin_master_poet,Kwi-Sin Master,5,4,1,3,0,,0,0,0,1,0,1
+4731,mingken_master_poet,Ming-Ken Master,5,4,2,3,0,,0,0,0,1,0,1
+4732,ohaeng_master_poet,Ohaeng Master,5,4,3,3,0,,0,0,0,1,0,1

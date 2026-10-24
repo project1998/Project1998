@@ -21,7 +21,7 @@ namespace Server;
 /// sends a target entity id), <b>5</b> = self / no-target. The client renders type 1/2 in the Spell book and
 /// type 5 in the Skill book (both populate through the same 0x17 packet, keyed on this type).
 /// <c>Mark</c> is the SUBPATH RANK required (SplMark: 0 = the base 1-99 class list, 1 = Il san, 2 = Ee san,
-/// 3 = Sam san) — 121 of the 906 rows carry one and they all have <c>SplLevel</c> 0, which used to make them
+/// 3 = Sam san) — 151 of the 957 rows carry one and they all have <c>SplLevel</c> 0, which used to make them
 /// look like level-1 spells and land in every level-99 character's book alongside the base list. See
 /// <see cref="Content.MarkSpellLevel"/>.
 /// </summary>
@@ -536,13 +536,13 @@ public static partial class Content
 
     /// <summary>The level a mark (subpath-rank) spell is pinned to. Marks sit ON TOP of the level cap — an
     /// Il san is, in the user's words, "level 100" — so every rank spell needs level 99 first and then the
-    /// rank. The CSV can't say that (SplLevel is 0 on all 121 of them), so <see cref="LoadSpells"/> floors
+    /// rank. The CSV can't say that (SplLevel is 0 on all 151 of them), so <see cref="LoadSpells"/> floors
     /// them here and <see cref="SpellsForClass"/>'s ordinary <c>Level &lt;= maxLevel</c> test does the rest.</summary>
     public const int MarkSpellLevel = 99;
 
     /// <summary>The highest subpath rank a character may hold: <b>3, Sam san</b> — the last one that exists
     /// as content. Paths.csv names five ranks per path and Items.csv carries 34 Sa san (mark 4) items, but
-    /// <b>Spells.csv stops dead at mark 3</b>: 46 mark-1 rows, 57 mark-2, 18 mark-3, and zero for 4 or 5.
+    /// <b>Spells.csv stops dead at mark 3</b>: 46 mark-1 rows, 57 mark-2, 48 mark-3, and zero for 4 or 5.
     /// (That asymmetry is exactly what proved Sam san was an RTK implementation gap rather than an
     /// out-of-era feature — see the nexustk-495-subpath-spells note; Sa san is the same gap, one tier up and
     /// not yet closed.) Allowing rank 4 would mint a "Sa san" whose only difference from a Sam san is one
@@ -1009,11 +1009,18 @@ public static partial class Content
     // caster with 25% vita left. Damage to target is 1.875 times current vitality plus 0.5 current mana at 0 AC".
     // The sacrifice verb's FocusedBlow and Siege branches carry those numbers, with the Atlas pages' mana and
     // aethers (#328). Siege's three alignment names are below; the live Atlas warrior page lists them
-    // (https://www.nexusatlas.com/spells/warrior.php, fetched 2026-10-21). Focused Blow's are not in Spells.csv.
+    // (https://www.nexusatlas.com/spells/warrior.php, fetched 2026-10-21). So are Focused Blow's, which the live
+    // Atlas rogue page lists in Focused Blow's own block (https://www.nexusatlas.com/spells/rogue.php, fetched
+    // 2026-10-10; Caleb, 2026-10-24, decision sheet item 7).
     public enum SacrificeFamily { LethalStrike, DesperateAttack, Berserk, Whirlwind, FocusedBlow, Siege }
     private static readonly Dictionary<string, SacrificeFamily> SacrificeAliases = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["focused_blow_rogue"] = SacrificeFamily.FocusedBlow,
+        // Focused Blow + its three alignment aliases: Kwi-Sin "Burial Dance", Ming-Ken "Flowing Energy", Ohaeng
+        // "Freeform". Same mechanic, as Siege's below.
+        ["focused_blow_rogue"]   = SacrificeFamily.FocusedBlow,
+        ["burial_dance_rogue"]   = SacrificeFamily.FocusedBlow,
+        ["flowing_energy_rogue"] = SacrificeFamily.FocusedBlow,
+        ["freeform_rogue"]       = SacrificeFamily.FocusedBlow,
 
         // Siege + its three alignment aliases (user-confirmed): Kwi-Sin "Soul's Freedom", Ming-Ken
         // "Life's End", Ohaeng "Winter Chill". Same mechanic; as for every family here, a cast shows the name
@@ -1108,9 +1115,15 @@ public static partial class Content
     public static string? RandomAdvice() => AdviceHints.Length == 0 ? null : AdviceHints[Random.Shared.Next(AdviceHints.Length)];
 
     // Sam San one-offs that fit no existing archetype (nexusatlas 2004; the 2002-10-01 TSWolf announcement
-    // names Mend Equipment "Luster return" and Spirit Salvation, i.e. these are alignment aliases whose other
-    // identifiers we do not know - only the unaligned key is wired).
-    public static bool IsMendEquipment(SpellDef sp) => sp.Key == "mend_equipment_warrior";
+    // names Mend Equipment "Luster return" and Spirit Salvation, i.e. these are alignment aliases). The live
+    // Nexus Atlas warrior page names all three of Mend Equipment's: Kwi-Sin "Restore equipment", Ming-Ken "Luster
+    // return", Ohaeng "Reforge" (https://www.nexusatlas.com/spells/warrior.php, fetched 2026-10-21; Caleb,
+    // 2026-10-24, decision sheet item 7). They repair as Mend Equipment does, so all four keys take its verb.
+    private static readonly HashSet<string> MendEquipmentSpells = new(StringComparer.Ordinal)
+    {
+        "mend_equipment_warrior", "restore_equipment_warrior", "luster_return_warrior", "reforge_warrior",
+    };
+    public static bool IsMendEquipment(SpellDef sp) => MendEquipmentSpells.Contains(sp.Key);
 
     // NPC-subpath guardian spells (their own SplPthId: 8 Ju Jak, 9 Hyun Moo). Both had Spells.csv rows but no
     // archetype, so they spent mana and did nothing. Hyun Moo Revival is the one spell MEANT to be cast while
@@ -1141,7 +1154,9 @@ public static partial class Content
     //   Fire's row takes the same gate at the live Nexus Atlas mage page's "Mana Cost - 15,275" and its
     //   "Aethers - 65 Seconds" (https://www.nexusatlas.com/spells/mage.php, fetched 2026-10-10; Caleb,
     //   2026-10-22, decision sheet item 5): arch_damage refuses below 15,275 for free, and from it the cast
-    //   ends at 0 for the same reason, so it stays false too. RTK has no script for it. Retribution and its
+    //   ends at 0 for the same reason, so it stays false too. RTK has no script for it. Its three alignment
+    //   names on that page, Deaths awakening, Soul rip and Final blow (Caleb, 2026-10-24, decision sheet item 7),
+    //   carry its row and take the same entry, as Inferno's reskins take Inferno's. Retribution and its
     //   three reskins (RTK poet/retribution.lua, `player.magic = 0` after a successful global_zap) are the
     //   same thing one tier down: "deals 34% of current mana to target", and it empties you doing it.
     // 0.7 - Hellfire and its three alignment reskins. RTK Spells/mage/hellfire.lua takes its cost TWICE:
@@ -1160,6 +1175,8 @@ public static partial class Content
         ["inferno_mage"] = new(1.0, false), ["dooms_fire_mage"] = new(1.0, false),
         ["deaths_door_mage"] = new(1.0, false), ["natures_denial_mage"] = new(1.0, false),
         ["steel_storm_mage"] = new(1.0, false),
+        ["deaths_awakening_mage"] = new(1.0, false), ["soul_rip_mage"] = new(1.0, false),
+        ["final_blow_mage"] = new(1.0, false),
 
         ["hellfire_mage"] = new(0.7, false),     ["consume_soul_mage"] = new(0.7, false),
         ["flesh_eaters_mage"] = new(0.7, false), ["hurricane_mage"] = new(0.7, false),
