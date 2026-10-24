@@ -1006,7 +1006,10 @@ Caveats worth keeping: the atlas reuses **one GIF per visual family** (10 mage s
 it resolves a spell's family, not always its exact id — where the client holds near-identical siblings (the
 bolts #26/#27/#29) the atlas cannot say which a given spell uses. `ls.gif` and `ww.gif` are byte-identical, so
 Lethal Strike and Whirlwind are indistinguishable from this source. `kwisinarmor.gif` was never archived. The
-subpath pages (`ilsan`/`eesan`/`samsan`) 404 in every capture, so subpath spells have no atlas animation.
+rank spell pages (`spells/ilsan.php`/`eesan.php`/`samsan.php`) 404 in their 2002-12-30 and early-2003 captures
+(`samsan` until 2004-04-23), but not in every capture: Wayback holds them answering 200 from 2003-06-09
+(`ilsan`), 2003-08-22 (`eesan`) and 2004-08-09 (`samsan`). Nothing in this repo has read those later captures
+yet, so the rank spells have no atlas animation.
 **Use the 2002-03 captures, not the 2018 ones** — the later site serves `/photo/spells60/`, a 6.0-era art set
 that would silently poison a 4.95 match.
 
@@ -3219,9 +3222,15 @@ rows). Each `SpellDef` = `Id, Key(SplIdentifier), Name(SplDescription), Type, Pa
   san taught it.
   > **The rank ladder stops at Sam san** (`Content.MaxMark` = 3), and `@mark`/`@class` refuse anything above
   > it rather than clamping. Paths.csv names five ranks and Items.csv carries 34 Sa san (mark 4) items, but
-  > **Spells.csv has 46 / 57 / 18 / 0 / 0 rows for marks 1-5** — that exact asymmetry is what proved Sam san
-  > was an RTK implementation gap rather than an out-of-era feature (`nexustk-495-subpath-spells`), and Sa
-  > san is the same gap one tier up. A rank 4 would be a title and one level of stat growth over nothing.
+  > **Spells.csv has 46 / 57 / 18 / 0 / 0 rows for marks 1-5**. A rank 4 would be a title and one level of
+  > stat growth over nothing.
+  > *Era:* the mark-3 rows do not date Sam san, and the dated pages put it after our 2001-07-09. tswolf's San
+  > quests page lists only the marks "Il San, Ee San" (tswolf.com/quests/sanquests/, Wayback 2001-01-29 and
+  > 2001-06-27), its spell pages link Il San and Ee San and no Sam San through 2001-08-21, and Wayback holds
+  > no tswolf.com/spells/samsan.shtml; Nexus Atlas first documents it on its "Sam San, 3rd Mark" quest page
+  > (nexusatlas.com/quests/samsan.php, first capture 2002-10-05). Sam san is kept as today anyway, with no era
+  > gate (Caleb, 2026-10-24), and its promotion is to be built after Il san's and Ee san's. Sa san is later
+  > still: its Atlas quest page is first captured 2008-10-15.
   > *Known consequence:* those 34 Sa san items stay unwearable, since `ItmMark` reads the same field. That is
   > right for a rank nobody can hold, and it reverses the moment `MaxMark` moves.
   > **Return/Approach/Summon are NOT part of that peasant-commons union (corrected 2026-07-27)** — the CSV's
@@ -3396,8 +3405,8 @@ a time is the point of it.
 than the guild master — "the guildmaster is not involved in these spells": you kill something, come back, and
 hand over items. Warrior **Greater Blessing 70 / Spirit Fury 99**, Rogue **Spot Traps 70 / Serpent's Fury
 99**, Mage **Fissure 70 / Lava Surge 99**, Poet **Survive 70 / Fascinate 99**. Source: the archived nexusatlas
-*Dog Spells* page (`re/fx/atlas_html/class_dog.html`, capture **2002-12-30** — in era, same timeline as Sam
-San). They sit in Spells.csv under the `===DOG SPELLS===` divider with `SplPthId 99` and `SplLevel 0`, so no
+*Dog Spells* page (`re/fx/atlas_html/class_dog.html`, capture **2002-12-30**, after our 2001-07-09;
+the eight spells are in era by tswolf's dog page, Wayback 2001-02-24). They sit in Spells.csv under the `===DOG SPELLS===` divider with `SplPthId 99` and `SplLevel 0`, so no
 class filter could ever match them — **dead data until 2026-08-08**. Eligible paths are the **four base
 classes and the four NPC subpaths**, never a PC subpath (`Content.CanLearnDogSpells`), which is the page's own
 rule: "people in PC subpaths cannot learn these spells". Where the fan tutor-board posts disagree on the level (Greater Blessing
@@ -4259,8 +4268,10 @@ path (NOT from the internal `Warp()` used by quests/Gateway/GM teleports — RTK
 handler, not in `pc_warp` itself), reproduces RTK's denial-message cascade verbatim, including its dead
 branches: because almost every gated map sets `ReqLvl`, the level-difference messages already cover every
 diff value, so the mark/path-specific text is only reachable when `ReqLvl` equals the player's level
-exactly and a mark/path check also fails. `CharMark` is still hardcoded to 0 (subpath marks aren't
-modelled — see `MinorQuest.cs`), so any `ReqMark > 0` map stays locked for everyone until that lands.
+exactly and a mark/path check also fails. `CharMark` reads the character's mark (`_char.Mark`,
+`Session.CharacterApi.cs`), so a `ReqMark > 0` map's mark check passes for anyone whose mark meets it. No NPC
+sets the mark yet; only `@mark` (or a rank title given to `@class`) does, so in play only a character marked
+that way passes it.
 
 **Reject = snap-back + status text, fixed 2026-07-27.** When the gate denies entry, RTK does two things
 in order (clif.c:5188-5204): **(1)** `clif_pushback(sd)` (clif.c:15617) — a `pc_warp` that shoves the

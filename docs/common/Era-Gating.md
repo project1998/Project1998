@@ -118,6 +118,31 @@ for the same reason.
 > The formulas themselves are disputed between two archive sources, and which one we implement is written
 > up where the code is, in `docs/4.x/Protocol.md` under the self-sacrifice strike family.
 
+### Dated after our window, and kept with no gate: Ranger
+
+Not every late arrival gets a gate. **Ranger** (PthId 15, the rogue's second PC subpath) is dated after
+2001-07-09 by the pages we have, and is kept as RTK and today have it: no row in `EraFeatures.csv`, no gate
+(Caleb, 2026-10-24). This is a source note, not a feature date.
+
+- tswolf's Classes/Subpaths page (tswolf.com/classes/, Wayback 2001-01-26, 2001-06-15 and 2001-08-05) names
+  Merchant, **Shadow** and Spy in the Rogue column. Ranger is not there.
+- Nexus Atlas's subpath legend page (nexusatlas.com/legends/subpaths.php, first capture 2002-12-25) lists
+  Ranger's legend marks, and of Shadow's says they can no longer be received, as *"the Shadow are no longer a
+  path"*.
+- So Ranger took Shadow's slot between 2001-08-05 and 2002-12-25. The 4.95 client draws no user-list badge for
+  that slot (the badge table in `docs/4.x/Protocol.md`), which fits either name.
+
+Why no gate: it would disable a subpath the PC-subpath work will use and leave rogues two PC subpaths, and Shadow
+exists nowhere in our data (no `Paths.csv` row, no client badge), so nothing could stand in its place. No one can
+hold a PC subpath today anyway (`Content.PlayablePaths`).
+
+**What would settle the date:** a dated page between 2001-08-05 and 2002-12-25 that names the Ranger subpath or
+the end of Shadow: the official site's news from September 2001 on, tswolf's own late-2001 news, or a capture
+of the Atlas legend page earlier than 2002-12-25 (Wayback lists none).
+
+Sam san is the other content dated after our window and kept with no gate; its dating is written at
+`Content.MaxMark` (`Server/Content.Spells.cs`) and in `docs/4.x/Protocol.md`'s rank-ladder note.
+
 ## Adding a gate
 
 1. Add a row to `EraFeatures.csv` with a `Source`.

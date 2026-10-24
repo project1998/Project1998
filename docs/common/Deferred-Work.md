@@ -501,8 +501,15 @@ trials, from bon_hwa.lua:
 | **Ee san** (mark 2) | Knowledge (1.2B exp), Strength (Spirit+Avenger in 8 mythic caves via `allMythicCaveBosses`), Wealth (2M coin), Skill (6 carnage **or** 12 combined minigame wins), Culture (Skilled in a craft), Spirit (Tiger karma) | carnage/minigame win counters, crafting skill levels — neither modelled |
 
 Knowledge/Wealth/Strength(rat)/Spirit(karma) are wireable today; Skill and Culture are the real blockers, and
-they are the same systems the greater alliances and the Sam san Sage gate wait on. Sam/Sa san stay out of era
-regardless (`Content.MaxMark = 3`; Sa san released ~2008 — see `[[nexustk-495-server-status]]` era notes).
+they are the same systems the greater alliances and the Sam san Sage gate wait on.
+
+**Sam san is in the game here, though the dated pages put it after 2001-07-09.** `Content.MaxMark = 3` admits
+it (`@mark 3`, its 18 spells). tswolf's San quests page lists only the marks "Il San, Ee San" (Wayback
+2001-01-29 and 2001-06-27), its spell pages link no Sam San through 2001-08-21, and Nexus Atlas first documents
+it on its "Sam San, 3rd Mark" quest page (first capture 2002-10-05). It is kept as today anyway, with no era
+gate (Caleb, 2026-10-24), and its promotion is to be built after Il san's and Ee san's; RTK has no script for
+it, and the 2002 Atlas trials need greater alliances (below) and event-game wins. **Sa san stays out:** its
+Atlas quest page is first captured 2008-10-15, and `MaxMark = 3` keeps mark 4 unreachable.
 
 ## Greater alliances with the mythic animals
 

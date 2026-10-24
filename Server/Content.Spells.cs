@@ -543,10 +543,16 @@ public static partial class Content
     /// <summary>The highest subpath rank a character may hold: <b>3, Sam san</b> — the last one that exists
     /// as content. Paths.csv names five ranks per path and Items.csv carries 34 Sa san (mark 4) items, but
     /// <b>Spells.csv stops dead at mark 3</b>: 46 mark-1 rows, 57 mark-2, 18 mark-3, and zero for 4 or 5.
-    /// (That asymmetry is exactly what proved Sam san was an RTK implementation gap rather than an
-    /// out-of-era feature — see the nexustk-495-subpath-spells note; Sa san is the same gap, one tier up and
-    /// not yet closed.) Allowing rank 4 would mint a "Sa san" whose only difference from a Sam san is one
+    /// Allowing rank 4 would mint a "Sa san" whose only difference from a Sam san is one
     /// more level of stat growth and a title, so the ladder stops here until those spells are written.
+    /// <para>ERA: the mark-3 rows show the spells are in our data, not when Sam san arrived, and the dated
+    /// pages put it after our 2001-07-09. tswolf.com/quests/sanquests/ lists only the marks "Il San, Ee San"
+    /// (Wayback 2001-01-29 and 2001-06-27), its spell pages link Il San and Ee San and no Sam San through
+    /// 2001-08-21, and Wayback holds no tswolf.com/spells/samsan.shtml at all; Nexus Atlas first documents it
+    /// on its "Sam San, 3rd Mark" quest page (nexusatlas.com/quests/samsan.php, first capture 2002-10-05).
+    /// Sam san stays at 3 anyway, as today and with no era gate (Caleb, 2026-10-24), and its promotion is to
+    /// be built after Il san's and Ee san's. Sa san is later still: its Atlas quest page's first capture is
+    /// 2008-10-15.</para>
     /// <para>KNOWN CONSEQUENCE: the 34 mark-4 items stay unwearable, since the ItmMark gear gate reads the
     /// same field. That is the correct behaviour for a rank nobody can hold — Sa san gear is precisely what
     /// a Sa san would wear — and it reverses the moment this constant moves.</para></summary>
@@ -873,8 +879,14 @@ public static partial class Content
     /// <summary>The paths a character may actually BE: the four base classes and Peasant, plus the four NPC
     /// subpaths (Chung ryong / Baekho / Ju jak / Hyun moo). Everything else in Paths.csv is either RTK's GM
     /// branch (5 Dreamweaver, 22 Archon) or a PC subpath (10-21 Barbarian … Muse) that this server does not
-    /// model — no spells, no promotion NPC, and in the PC subpaths' case a rank ladder that would silently
-    /// hand out the base class's secrets under the wrong titles.</summary>
+    /// model — no spell behaviour (in Tests/Fixtures/spell-dispatch-routes.txt every PC-subpath row but Spirit
+    /// blade routes to the generic verb), no joining or promotion NPC, and <see cref="SpellsForClass"/> would
+    /// teach a holder its base class's whole list, rank rows included, plus its own rows at level 99, free
+    /// where no learn row exists. The titles such a holder would show are not wrong: they are Paths.csv's own
+    /// PthMark1-4, which the live Nexus Atlas subpath pages pair with the Il/Ee/Sam/Sa san icons. Of the ten
+    /// of those pages read on 2026-10-24 (Do and Muse did not answer), eight match (Shaman's "Mog-Ur" only in
+    /// letter case); Chongun spells mark 2 "Kysh'itra" (ours "Kyshitra") and Merchant has marks 3 and 4 the
+    /// other way round.</summary>
     public static readonly IReadOnlySet<int> PlayablePaths = new HashSet<int> { 0, 1, 2, 3, 4, 6, 7, 8, 9 };
 
     public static bool IsPlayablePath(int pathId) => PlayablePaths.Contains(pathId);
@@ -966,11 +978,14 @@ public static partial class Content
     // WHAT WE SHIP (earliest of each):
     //     Enchant 1.5 | Infuse 2 | Ingress 3 | Viper's Venom 4 | Dragon's Flame 5 | Spirit Blade 9
     //     Baekho's Blade (rogue, Ee San) 1.5
-    // Melalye's Dragon's Harness (Sam San) 8 and Chung Ryong's Wrath (Sa San) 10 do NOT exist in our 4.95
-    // Spells.csv (later-era subpath content) so they are not added. spirit_blade was ADDED here — it existed
-    // in Spells.csv with no SpellMods row, i.e. it was silently INERT. The row alone did not wire it: having no
-    // spell_effects row either, it reached Session.ApplyCast's no-row fallback first, which now hands an enchant
-    // to the same stance verb as the rest of this table.
+    // Melalye's Dragon's Harness (Sam San) 8 DOES exist: Spells.csv id 1094, dragons_harness_warrior, and
+    // SpellMods.csv carries it at that 8 for 10,000 mana, the only figure any source in this note gives it
+    // (Sam san is kept with no era gate; see MaxMark). SpellMods.csv also carries Blade's charm (rogue, Sam
+    // San) at 3 for 0 mana, a figure no source in this note names. Melalye's Chung Ryong's Wrath (Sa San) 10
+    // has no Spells.csv row (Sa san is later-era content), so it is not added. spirit_blade was ADDED here —
+    // it existed in Spells.csv with no SpellMods row, i.e. it was silently INERT. The row alone did not wire
+    // it: having no spell_effects row either, it reached Session.ApplyCast's no-row fallback first, which now
+    // hands an enchant to the same stance verb as the rest of this table.
     // Klanx/Yari (also in the DM PDF) define `Ing` as 1 none | 3 Ingress | 4 "Il san NPC" | 5 "Ee san NPC",
     // agreeing on Ingress 3. Infuse 2 / Ingress 3 / Viper's Venom 4 are unanimous across all sources.
     // NOTE baekhos_blade_rogue 1.5 now EQUALS the free tigers_fortitude_rogue despite costing 6000 mana at
