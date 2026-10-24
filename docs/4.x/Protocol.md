@@ -4376,11 +4376,23 @@ deflected." — RTK sends nothing to the target on a resist.
 
 **Request: LIVE-confirmed.** Pressing **b** sends op `0x3B` — matches RTK's dispatch exactly
 (`clif.c:11613`, `case 0x3B: clif_handle_boards(sd);`). Body `dec[0]` is a sub-command, then u16-BE
-board/post ids: `1`=show board list, `2 board`=show a board's posts, `3 board post`=read one post,
-`4 board topicLen topic bodyLen body`=make a post, `5 board post`=delete a post,
-`6 toLen to topicLen topic msgLen(u16BE) msg sendCopy`=**send nmail from the native compose window**
-(RTK `nmail_write`, level-10 gated), `9`=open the mailbox (== sub-2 with board 0). `Session.HandleBoard`
-decodes 1–6 + 9; 7/8 (GM postcolor, scripted special-write) aren't modelled.
+board/post ids: `1`=show board list, `2 board start(u16BE) F0 00`=show one page of a board's posts
+(below), `3 board post`=read one post, `4 board topicLen topic bodyLen body`=make a post,
+`5 board post`=delete a post, `6 toLen to topicLen topic msgLen(u16BE) msg sendCopy`=**send nmail from
+the native compose window** (RTK `nmail_write`, level-10 gated), `9`=open the mailbox (== sub-2 with
+board 0). `Session.HandleBoard` decodes 1–6 + 9; 7/8 (GM postcolor, scripted special-write) aren't
+modelled.
+
+**Sub-2's start: a static read of the 4.95 client, not a live capture** (2026-10-24). The window sends
+`02 board 7F FF F0 00` when a board or the Mailbox is picked (builder `0x407ec0`) and when it refreshes from
+the top after an acknowledgement pop-up (`0x408f90`, `0x40c520`). When the list is scrolled to its bottom or
+the keyboard selects its last row, it sends `02 board start F0 00` with start = (the oldest id it holds) − 1
+(`0x408fb0` → `0x409350`; mailbox `0x40c540` → `0x40c910`; `7F FF` while the list is empty), and sends
+nothing once that is 0. `F0` is constant and the trailing `00` is appended by the send routine (`0x475ab0`).
+Each reply that repeats the page's board id and mode byte is merged into the open list by id. RTK reads
+only byte 8, the start's high byte (`7F` restarts its per-session cursor, `clif.c:11165`).
+`SendBoardPosts` serves up to 20 entries whose id is at most start, newest first; `7F FF`, or a body too
+short to carry a start, is the top.
 
 **Board 0 == the player's nmail mailbox** (RTK `boards_showposts`: "Board(0) == NMail"). The client's
 board window is MODE-SWITCHED by the reply's first byte (`flags2`, below): mode 4 turns it into the
@@ -4415,7 +4427,9 @@ codebase, rather than copying RTK's literal (and inconsistent) byte-4 values.
   reachable way into the mailbox, since the 'm' hotkey is dead (below).
 - **Show a board's posts** (`SendBoardPosts`): `flags2(u8) flags1(u8) board(u16BE) boardNameLen boardName[...]
   postCount` then per post, newest first, `color(=0) postId(u16BE) authorLen author[...] month day topicLen
-  topic[...]`. **`flags2` is the window-mode byte: 2 = normal board, 4 = NMAIL MAILBOX** (RTK
+  topic[...]`. One page: at most 20 posts, the request's start and below (RTK `mapif_parse_showposts`,
+  `LIMIT bcount*20,20`), so `postCount` is the posts on this page and never passes 20. The 4.95 client
+  reads it as a signed byte. **`flags2` is the window-mode byte: 2 = normal board, 4 = NMAIL MAILBOX** (RTK
   char/mapif.c `mapif_parse_showposts`: `if (a.board == 0) flags2 = 4; else 2`) — mode 4 is what makes
   Write compose WITH a recipient field (sub-6). `flags1` = rights: 1=read-only, 3=write+del, special
   6="write sends a packet" for scripted boards (not modelled).

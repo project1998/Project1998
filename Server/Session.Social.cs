@@ -636,7 +636,17 @@ public sealed partial class Session
                 if (Content.MailFirstOnBoard && Mail.UnreadCount(_char.Name) > 0) SendBoardPosts(0);
                 else SendBoardList();
                 break;
-            case 2: if (dec.Length >= 3) SendBoardPosts(new PacketReader(dec.AsSpan(1)).U16BE()); break;                  // Show posts from board # (board 0 -> own mailbox)
+            // Show posts from board # (board 0 -> own mailbox): `02 board(u16BE) start(u16BE) F0 00` from 4.95.
+            // start is 7F FF when the window opens or refreshes, else (the oldest id it holds) - 1 — see
+            // SendBoardPosts. A body too short to carry a start (our own facts send `02 board`) means the top.
+            case 2:
+                if (dec.Length >= 3)
+                {
+                    var r = new PacketReader(dec.AsSpan(1));
+                    int board = r.U16BE();
+                    SendBoardPosts(board, start: dec.Length >= 5 ? r.U16BE() : BoardPageFromTop);
+                }
+                break;
             case 3: if (dec.Length >= 5) SendBoardReadPost(new PacketReader(dec.AsSpan(1)).U16BE(), new PacketReader(dec.AsSpan(3)).U16BE()); break;  // Read post (board 0 -> own mailbox)
             case 4: HandleBoardMakePost(dec); break;                                          // Make post (board 0 rejected — see its own doc)
             case 5: if (dec.Length >= 5) HandleBoardDelete(new PacketReader(dec.AsSpan(1)).U16BE(), new PacketReader(dec.AsSpan(3)).U16BE()); break;   // Delete post (board 0 -> own mailbox)
@@ -739,8 +749,9 @@ public sealed partial class Session
 
     // Sub-2 "Show posts from board #": flags2(u8) flags1(u8) board(u16BE) boardNameLen(u8) boardName[...]
     // postCount(u8) then per post [color(u8) postId(u16BE) nameLen(u8) name[...] month(u8) day(u8)
-    // topicLen(u8) topic[...]], newest first. flags2 is the WINDOW-MODE byte (RTK char/mapif.c):
-    // 2 = normal board, 4 = NMAIL MAILBOX (Write button becomes recipient-field compose emitting sub-6).
+    // topicLen(u8) topic[...]], newest first, one page of at most 20 (below). flags2 is the WINDOW-MODE byte
+    // (RTK char/mapif.c): 2 = normal board, 4 = NMAIL MAILBOX (Write button becomes recipient-field compose
+    // emitting sub-6).
     // flags1 = write/del rights (1=none? 3=write+del; special 6 = "write sends a packet" for scripted
     // boards, not modelled). Board id 0 is the player's OWN mailbox (RTK case 9 == this same builder
     // called with board 0 — see Mail.cs): "name" per post becomes the sender, and an unread letter's
@@ -751,11 +762,25 @@ public sealed partial class Session
     // So a writable board is flags1=2 when popped open by a sign vs flags1=3 from the `b` menu. Without this,
     // an unsolicited 0x31 is silently dropped (the exact symptom: packet sent, nothing opens). Mailbox (board
     // 0) has no sign path, so popup only applies to real boards.
-    private void SendBoardPosts(int boardId, bool popup = false)
+    //
+    // PAGES OF 20, as RTK: mapif_parse_showposts selects `ORDER BY ... DESC LIMIT bcount*20,20` for mail and
+    // boards alike (rtk/src/char/mapif.c:398, :400), and the reply's count byte is the rows on that page. The
+    // 4.95 window asks for the next page itself (a static read of the client, not a live capture): it opens
+    // with start 7F FF (0x407ec0), sends (its oldest id - 1) when the list is scrolled to the bottom or the
+    // last row is selected (0x408fb0 -> 0x409350; mailbox 0x40c540 -> 0x40c910), stops asking once that is
+    // 0, and merges every reply that repeats its board id and mode byte into the open list by id. So a page
+    // is "up to 20 entries whose id is at most start, newest first", and start 7F FF (or none) is the top.
+    // RTK keeps a per-session cursor instead (sd->bcount, bumped after every reply, rtk/src/map/intif.c:555,
+    // zeroed by the openers, rtk/src/map/clif.c:11160, :11165, :11196); the client's own start shows the
+    // player the same pages with no state here, and without RTK's re-sent pages after a refresh. So every
+    // opener — sub-1's mailbox shortcut, sub-9, the board-sign popup, sub-2 with 7F FF — lands on the top.
+    // The page also keeps the count byte far below 128: 4.95 reads it SIGNED (0x408064, 0x40b8b4), so the
+    // old whole-list reply drew 128-255 entries as an empty list and wrapped past 255.
+    private void SendBoardPosts(int boardId, bool popup = false, int start = BoardPageFromTop)
     {
         if (boardId == 0)
         {
-            var inbox = Mail.InboxFor(_char.Name);
+            var inbox = BoardPage(Mail.InboxFor(_char.Name), m => m.Position, start, out int letters);
             // flags2=4 is RTK's NMAIL marker (char/mapif.c mapif_parse_showposts: "if (a.board == 0)
             // board_header.flags2 = 4; else = 2") — THE byte that flips the client's board window into
             // mailbox mode, where Write composes WITH a recipient field (sub-6) instead of a board post
@@ -780,12 +805,12 @@ public sealed partial class Session
                 d0.U8((byte)tn0.Length);
                 d0.Bytes(tn0);
             }
-            SendMap(ServerOp.Board, _gameInc++, d0.ToArray(), $"boardposts(0x31) mailbox n={inbox.Count}");
+            SendMap(ServerOp.Board, _gameInc++, d0.ToArray(), $"boardposts(0x31) mailbox n={inbox.Count} of {letters}");
             return;
         }
 
         string name = Boards.Find(boardId)?.Name ?? "";
-        var posts = Boards.PostsFor(boardId);
+        var posts = BoardPage(Boards.PostsFor(boardId), p => p.Id, start, out int total);
 
         // flags2=2 (real board), flags1=3 normally / 2 when we pop the window open (see popup note above).
         var d = new PacketWriter().U8(2).U8((byte)(popup ? 2 : 3));
@@ -807,7 +832,25 @@ public sealed partial class Session
             d.U8((byte)tn.Length);
             d.Bytes(tn);
         }
-        SendMap(ServerOp.Board, _gameInc++, d.ToArray(), $"boardposts(0x31) board={boardId} n={posts.Count}");
+        SendMap(ServerOp.Board, _gameInc++, d.ToArray(), $"boardposts(0x31) board={boardId} n={posts.Count} of {total}");
+    }
+
+    // One page of a board or the mailbox: the 4.95 window's "from the top" start, and RTK's page size.
+    private const int BoardPageFromTop = 0x7FFF, BoardPageSize = 20;
+
+    // Up to BoardPageSize entries of a newest-first list whose id is at most start, in the same order. A start
+    // of 7F FF or more is the top; 4.95 never sends more (it writes the start from a signed 16-bit id).
+    private static List<T> BoardPage<T>(List<T> newestFirst, Func<T, int> id, int start, out int total)
+    {
+        total = newestFirst.Count;
+        var page = new List<T>(Math.Min(total, BoardPageSize));
+        foreach (var entry in newestFirst)
+        {
+            if (page.Count == BoardPageSize) break;
+            if (start < BoardPageFromTop && id(entry) > start) continue;
+            page.Add(entry);
+        }
+        return page;
     }
 
     // Sub-3 "Read post": type(u8: 3=board post, 5=nmail letter) buttons(u8=3, always writable)
