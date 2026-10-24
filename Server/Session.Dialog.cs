@@ -376,8 +376,17 @@ public sealed partial class Session
         Notify(DaggerUniformQuest.RoosterNoticed);
     }
 
+    /// <summary>RTK's refusal for the subpath channel, verbatim: clif_parsewisp answers a whisper to "@" from a
+    /// class with no <c>classdb_chat</c> with <c>clif_sendbluemessage(sd, "You cannot do that.")</c>
+    /// (rtk/src/map/clif.c). Used for <c>/sp</c> and for the "@" route itself, on RTK's blue channel.</summary>
+    private const string SubpathChatRefusal = "You cannot do that.";
+
     // F2: flip the subpath-chat toggle and confirm via mini-text (RTK: "Subpath Chat: ON"/"OFF" — same
     // wording, same channel used elsewhere for status confirmations). Persisted so it survives a relog.
+    //
+    // For EVERY class, as RTK: clif_handle_clickgetinfo toggles the flag with no class check at all. The
+    // channel's gate is on SENDING (DoSubpathChat, RTK's "@" route), and since the audience is the speaker's
+    // own path, a Warrior with the toggle on simply never receives a line.
     private void ToggleSubpathChat()
     {
         _char.SubpathChat = !_char.SubpathChat;
@@ -386,12 +395,21 @@ public sealed partial class Session
         Log.Info($"   -> subpath chat {(_char.SubpathChat ? "ON" : "OFF")} for {_char.Name}");
     }
 
-    // "/subpathchat <msg>" (alias "/sp") — RTK clif_sendsubpathmessage: broadcast to every OTHER ONLINE
-    // player who shares your class AND has subpath chat toggled on (not map-scoped — this is a server-wide
-    // channel, unlike say/shout). Formatted "<@Name> (ClassName) message" per RTK, rendered via the same
-    // mini-text channel as whisper/status text.
+    // "/subpathchat <msg>" (alias "/sp"), and RTK's own route, a whisper to "@" (DoWhisper) — RTK
+    // clif_sendsubpathmessage: broadcast to every OTHER ONLINE player who shares your class AND has subpath
+    // chat toggled on (not map-scoped — this is a server-wide channel, unlike say/shout). Formatted
+    // "<@Name> (ClassName) message" per RTK, rendered via the same mini-text channel as whisper/status text.
+    //
+    // ONLY THE TWELVE PC SUBPATHS may speak on it: RTK's "@" route runs clif_sendsubpathmessage only when
+    // classdb_chat(class) is set — Paths.csv PthChat, non-zero on the PC subpaths and Archon alone — and answers
+    // everyone else "You cannot do that." So a base class or an NPC subpath is refused here, first. (On the "@"
+    // route DoWhisper's mute and cantalk gates run before this, which is RTK's order in clif_parsewisp too.)
+    // Since the audience is the speaker's own path, nobody outside the twelve can hear it either. (Every class
+    // could use it before the PC subpaths were joinable; the 2026-10-24 decision sheet, item 13, chose RTK's
+    // gate.)
     private void DoSubpathChat(string msg)
     {
+        if (!Content.HasSubpathChat(CharClassId)) { SendBlueMessage(SubpathChatRefusal); return; }
         if (!_char.SubpathChat) { SendMiniText("Turn on Subpath Chat first (F2)."); return; }
         if (IsMuted()) { ReportMuted(); return; }   // server-wide channel — the LAST one a mute may leave open
         if (!Content.CanTalk(_char.Map)) { SendMiniText("Your voice is swept away by a strange wind."); return; }

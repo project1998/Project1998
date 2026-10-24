@@ -102,16 +102,19 @@ public sealed class PeerMiniTextMonitorTests
 
     /// <summary>"/sp &lt;msg&gt;" walks every online player from the SENDER's thread and reads two fields off
     /// each — their subpath-chat toggle and their class name — before delivering. Those reads and the send are
-    /// now one critical section on the recipient; who hears it is unchanged.</summary>
+    /// now one critical section on the recipient; who hears it is unchanged.
+    /// <para>The players are Muses (a PC subpath) and the outsider a Spy: since the PC-subpath foundation only
+    /// the twelve PC subpaths may speak on the channel (Paths.csv PthChat, as RTK), so the Poets this used
+    /// first would now be refused before the loop is reached.</para></summary>
     [Fact]
     public void SubpathChatReachesEachSamePathPlayerInsideTheirMonitor()
     {
         const string sender = "SubpathSender";
-        var (low, lowProbe, _) = ProbePlayer("SubpathLow", c => { c.ClassName = "Poet"; c.SubpathChat = true; });
-        var (self, selfProbe, _) = ProbePlayer(sender, c => { c.ClassName = "Poet"; c.SubpathChat = true; });
-        var (high, highProbe, _) = ProbePlayer("SubpathHigh", c => { c.ClassName = "Poet"; c.SubpathChat = true; });
-        var (off, offProbe, _) = ProbePlayer("SubpathOff", c => { c.ClassName = "Poet"; c.SubpathChat = false; });
-        var (other, otherProbe, _) = ProbePlayer("SubpathOther", c => { c.ClassName = "Rogue"; c.SubpathChat = true; });
+        var (low, lowProbe, _) = ProbePlayer("SubpathLow", c => { c.ClassName = "Muse"; c.SubpathChat = true; });
+        var (self, selfProbe, _) = ProbePlayer(sender, c => { c.ClassName = "Muse"; c.SubpathChat = true; });
+        var (high, highProbe, _) = ProbePlayer("SubpathHigh", c => { c.ClassName = "Muse"; c.SubpathChat = true; });
+        var (off, offProbe, _) = ProbePlayer("SubpathOff", c => { c.ClassName = "Muse"; c.SubpathChat = false; });
+        var (other, otherProbe, _) = ProbePlayer("SubpathOther", c => { c.ClassName = "Spy"; c.SubpathChat = true; });
         Assert.True(low.StateRank < self.StateRank && self.StateRank < high.StateRank);
 
         foreach (var p in new[] { lowProbe, selfProbe, highProbe, offProbe, otherProbe }) p.Clear();
@@ -128,7 +131,7 @@ public sealed class PeerMiniTextMonitorTests
 
         Assert.Equal(0, offProbe.Count(line));     // toggle off
         Assert.Equal(0, otherProbe.Count(line));   // different path
-        Assert.Equal($"<@{sender}> (Poet) field is clear", lowProbe.Only(line));
+        Assert.Equal($"<@{sender}> (Muse) field is clear", lowProbe.Only(line));
     }
 
     // ---- 3. the parcel notice --------------------------------------------------------------------------

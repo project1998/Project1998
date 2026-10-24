@@ -242,6 +242,13 @@ public sealed partial class Session
         T("coins|gold", (s, a) => s.GiveCoinsCmd(a), "[n]",               "add coins to the purse (bare = +10,000; a negative n removes, floored at 0)"),
         T("ride|mount", (s, a) => s.ToggleMount(a), "[0|1]",              "get on/off the horse"),
 
+        // ---- PC subpaths ----------------------------------------------------------------------------
+        // PLAYER-tier, because two of its users are ordinary players: an elder admitting a member, and a member
+        // leaving. The GM-only parts (naming any subpath, appointing elders) are checked inside, in
+        // Server/Session.Subpaths.cs, which also says why membership is a grant rather than an NPC.
+        P("subpath", (s, a) => s.SubpathCmd(a),    "admit <name> [subpath] | leave | expel <name> | elder <name> [0|1]",
+                                                   "PC subpaths (bare = your standing): a GM or one of the subpath's elders admits a level-50 character or expels a member; leave your own; a GM appoints an elder (0 removes one)"),
+
         // ---- items ----------------------------------------------------------------------------------
         T("items",    (s, a) => s.ListItems(a),     "[filter]",           "list/fuzzy-search the item registry"),
         T("item",     (s, a) => s.GiveItemCmd(a),   "<name|id> [amount]", "summon an item into the bag (browse the registry with @items)"),

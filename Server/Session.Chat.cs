@@ -107,11 +107,12 @@ public sealed partial class Session
         if (!Content.CanTalk(_char.Map)) { SendMiniText("Your voice is swept away by a strange wind."); return; }
 
         // RTK clif_parsewisp routes special recipient "names" to a broadcast channel instead of a person:
-        // "!!" = group/party chat, "!" = clan chat. (RTK also has "@" = subpath and "?" = novice; subpath
-        // already has its own /sp entry point (DoSubpathChat) and novice chat isn't modelled.) These sit
-        // after the mute + cantalk gates so those apply to the channels too, exactly as RTK does.
+        // "!!" = group/party chat, "!" = clan chat, "@" = subpath chat — the same channel as /sp, so it goes
+        // through DoSubpathChat and its PC-subpath gate. (RTK also has "?" = novice, which isn't modelled.)
+        // These sit after the mute + cantalk gates so those apply to the channels too, exactly as RTK does.
         if (name == "!!") { DoGroupChat(msg); return; }
         if (name == "!")  { DoClanChat(msg);  return; }
+        if (name == "@")  { DoSubpathChat(msg); return; }
 
         // RTK's literal wording, on the BLUE wisp channel (clif_sendbluemessage) — same channel the whisper
         // itself would have used, NOT self-speech.

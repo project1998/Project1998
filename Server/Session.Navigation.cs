@@ -337,7 +337,11 @@ public sealed partial class Session
         // is safe as the "unwired" value.
         if ((x == 1 || x == 2) && y == 23 && hall.GuildMap != 0)
         {
-            if (CharClassId != hall.BaseClass)
+            // RTK compares player.baseClass (onScriptedTilesPathHalls.lua), so a PC-subpath member is let into
+            // their base class's guild hall. An NPC subpath is left as it was (the full path must match).
+            int cls = CharClassId;
+            bool member = cls == hall.BaseClass || (Content.IsPcSubpath(cls) && CharBasePathId == hall.BaseClass);
+            if (!member)
             {
                 // @anywarp waives the class gate with the usual echo; otherwise refuse as RTK does.
                 if (_gm.WaiveWarpGate)

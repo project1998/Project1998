@@ -146,6 +146,12 @@ Kinds: **stage** = a stage machine (0 = untouched), **flag** = 0/1, **counter** 
 | `dog_kill_{mobKey}` | snapshot | kills at task-assignment | |
 | `poet_restore` | stage/flag | 1 = hunting Storm; reset 0 on completion (legend `avenged_treachery_against_the_dogs` is the record) | Old Dog. Helpers: `dog_kill_tiger_storm`, `dog_kill_any` (total-kill snapshot — killing anything else re-arms the hunt). |
 
+### PC subpaths
+
+| Key | Kind | Values | Notes |
+|---|---|---|---|
+| `subpath_elder` | enum | the path id (10-21) of the PC subpath this character is an elder of; 0 or absent = none. Counts only while it is still the character's path | Written by `@subpath elder` (GM); cleared by joining and by leaving (`@subpath admit` / `leave` / `expel`), and by `@class` to another path. See `Server/Session.Subpaths.cs` |
+
 ### One-off oddities
 
 | Key | Kind | Notes |

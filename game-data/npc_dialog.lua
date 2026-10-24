@@ -1173,8 +1173,8 @@ end
 -- carry them.
 --
 -- PART THREE -- "cleanse" gives the spells back. RTK wraps this in a "commit to NEVER join a subpath"
--- prompt, which does not apply here: PC subpaths are what the exclusion is about and they are not joinable
--- on this server, while NPC subpaths keep their dog spells (Content.CanLearnDogSpells). So the commitment
+-- prompt. PC subpaths are joined here only by a GM's or an elder's grant (@subpath), which refuses anyone
+-- still holding Dog spells, and NPC subpaths keep theirs (Content.CanLearnDogSpells). So the commitment
 -- prompt is dropped and only the undo remains. Like RTK -- and like the live game its comments say it was
 -- checked against -- it takes the SPELLS and the karma but leaves the legend: you are still a linguist,
 -- you have just given the secrets back.

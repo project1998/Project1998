@@ -604,12 +604,14 @@ public static partial class Content
         Dictionary<int, string> Paths,
         Dictionary<int, string[]> Ranks,
         Dictionary<int, int> Bases,
-        Dictionary<int, int> Icons) LoadPaths(CsvTable csv)
+        Dictionary<int, int> Icons,
+        Dictionary<int, int> Chats) LoadPaths(CsvTable csv)
     {
         var paths = new Dictionary<int, string>();
         var ranks = new Dictionary<int, string[]>();
         var bases = new Dictionary<int, int>();
         var icons = new Dictionary<int, int>();
+        var chats = new Dictionary<int, int>();
         foreach (var col in csv)
             if (int.TryParse(col.Require("PthId"), out var id))
             {
@@ -619,9 +621,12 @@ public static partial class Content
                 ranks[id] = ladder;
                 bases[id] = int.TryParse(col.Require("PthType"), out var t) ? t : 0;
                 icons[id] = int.TryParse(col.Require("PthIcon"), out var ic) ? ic : 0;
+                // RTK class_db's `chat` (classdb_chat): non-zero on the twelve PC subpaths and the GM row Archon
+                // only, and the gate on RTK's subpath channel — see Content.HasSubpathChat.
+                chats[id] = int.TryParse(col.Require("PthChat", ""), out var ch) ? ch : 0;
                 col.Keep();
             }
-        return (paths, ranks, bases, icons);
+        return (paths, ranks, bases, icons, chats);
     }
 
     private static Dictionary<(int, string), (int, string)> LoadArmorQuestGates(CsvTable csv)

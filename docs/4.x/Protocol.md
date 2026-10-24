@@ -3180,11 +3180,15 @@ rows). Each `SpellDef` = `Id, Key(SplIdentifier), Name(SplDescription), Type, Pa
 - **`PathId`** = the class that learns it: **0 Peasant · 1 Warrior · 2 Rogue · 3 Mage · 4 Poet**, 5+ subpaths,
   99 = system/common. From the RTK `Paths` table (`Content.Paths`, `PthMark0` = class name; `PthMark1..5` are
   the per-rank titles). `Character.ClassName` (set with `@class`) resolves to a path id via `PathIdForClass`.
-  > **Playable paths** (`Content.PlayablePaths`) are the five base rows plus the four **NPC subpaths** —
-  > 6 Chung ryong (Warrior) · 7 Baekho (Rogue) · 8 Ju jak (Mage) · 9 Hyun moo (Poet). Paths.csv's other rows
-  > are RTK's GM branch (5 Dreamweaver, 22 Archon) and twelve **PC subpaths** (10-21 Barbarian … Muse); none
-  > is modelled here, and `@class` refuses them rather than minting a character with a rank ladder and no
-  > spells behind it.
+  > **Playable paths** (`Content.PlayablePaths`) are the five base rows, the four **NPC subpaths** —
+  > 6 Chung ryong (Warrior) · 7 Baekho (Rogue) · 8 Ju jak (Mage) · 9 Hyun moo (Poet) — and the twelve **PC
+  > subpaths** (10-21 Barbarian … Muse). Only RTK's GM branch (5 Dreamweaver, 22 Archon) is refused by
+  > `@class`. A PC subpath is joined by a grant (`@subpath admit`, from level 50, by a GM or one of the
+  > subpath's elders; `Server/Session.Subpaths.cs`) and left back to the base path with the subpath's own
+  > spells taken. Those spells are not taught yet: `SpellsForClass` drops every row whose `SplPthId` is a PC
+  > subpath (`Content.IsPcSubpathSpell`), so no trainer offers them and no rebuild grants them. A member's
+  > base-class trainer teaches them the base class's list and their base class's guild-hall door lets them in,
+  > as RTK does both off `baseClass`; an NPC subpath still needs the full path to match for either.
   >
   > An NPC subpath **is its base class plus a little**. `SpellsForClass` resolves `PathBaseOf` (RTK
   > `classdb_path`, the same PthType the gear gate already uses) and runs the whole base-class list through
@@ -4538,6 +4542,17 @@ gate whisper uses), it iterates `World.Online.All()` (new — a server-wide rost
 `class`/mark). Rendered via `SendMiniText` at the default `type=3` (proven-live mini/status pane) rather
 than RTK's literal `type=11` (its "group" channel, reused for subpath) — **unconfirmed** whether 4.95
 renders `type=11` distinctly from `type=3`; if it turns out to matter, this is a one-line change.
+
+**Who may use it — the twelve PC subpaths only, as RTK.** RTK's way onto the channel is a whisper to the name
+`@` (`clif_parsewisp`), which calls `clif_sendsubpathmessage` only when `classdb_chat(class)` is set and
+otherwise answers `clif_sendbluemessage(sd, "You cannot do that.")`. `classdb_chat` is Paths.csv `PthChat`:
+non-zero on the twelve PC subpaths (10-21) and the GM row Archon, zero on the base classes and the four NPC
+subpaths. Ours now loads `PthChat` (`Content.HasSubpathChat`) and applies it the same way: `/sp`, `/subpathchat`
+and a whisper to `@` (routed beside `!!` and `!` in `Session.DoWhisper`) all go through `DoSubpathChat`, which
+refuses anyone else with RTK's line on the blue channel (`0x0A` type 0) before its own other checks (the `@`
+route meets the whisper's mute and `cantalk` gates first, as in RTK's `clif_parsewisp`). F2 still toggles for
+every class, as RTK's does: the gate is on sending, and since the audience is the speaker's own path, a Warrior
+with the toggle on never receives a line. Before this, any class could use the channel, base classes included.
 
 ---
 

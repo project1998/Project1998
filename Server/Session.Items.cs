@@ -696,7 +696,10 @@ public sealed partial class Session
             minS += def.MinSDam; maxS += def.MaxSDam; minL += def.MinLDam; maxL += def.MaxLDam;
         }
         if (maxS <= 0) { minS = 1; maxS = 2; }   // bare-handed
-        else if (Content.PathIdForClass(_char.ClassName) == 3)   // Mage
+        // Mage, or any Mage subpath (Ju jak, Diviner, Geomancer, Shaman): the base class, as every class term of
+        // the swing is (see PlayerSwingRaw). RTK has no such penalty to key differently — its S range is the sum
+        // of the worn items' (pc.c pc_calcstat) — and whether 2001's subpath mages carried it is unmeasured.
+        else if (CharBasePathId == 3)
         {
             // MAGE WEAPON PENALTY — live-measured 2026-08-17, absent from RTK.
             // A mage reads a weapon's S range at roughly a QUARTER of face value. The transform is
@@ -1025,7 +1028,11 @@ public sealed partial class Session
     private (bool hit, double raw, bool crit, bool rear) PlayerSwingRaw(SwingTarget target, double reach = 1.0)
     {
         var eq = Totals();
-        int pathId = Content.PathIdForClass(_char.ClassName);
+        // The BASE class (RTK baseClass), not the exact path, keys every class term below: RTK's swingDamage.lua
+        // reads its class factor as _classFactors[player.baseClass + 1], so a Barbarian or a Chung ryong swings as
+        // the Warrior it is. With the exact path, every subpath fell to the Peasant's 0 and lost the Warrior's +2
+        // (PR #393's review, F1). Peasant, an unknown class and the GM rows read 0 as before.
+        int pathId = CharBasePathId;
         double might = Math.Max(EffMight, 1);
 
         // Hit/crit roll first — a miss is a real whiff (0 damage). LIVE-VALIDATED clamped-RTK grace/level
@@ -1080,6 +1087,9 @@ public sealed partial class Session
         //
         // Warrior #2's runs remain valid evidence for MightTerm and ClassFactor: Dam was genuinely 0
         // throughout them, which is what those fits assumed. Only the Dam conclusion was wrong.
+        // Keyed on the base class like the rest: RTK has no +2 to key at all (its Dam is the worn items' sum, pc.c
+        // pc_calcstat), so a Warrior subpath takes the Warrior's measured bonus, as it takes the Warrior's class
+        // factor. No 2001 measurement of a subpath's Dam exists.
         if (pathId == 1 && HasWeaponEquipped()) dam += 2;
         // FLOOR AT ZERO. RTK has math.max(player.dam, 1); we deleted that outright when a level-1
         // peasant with a 0-dam weapon measured as contributing 0, not 2.5. Kept at 0 as a defensive

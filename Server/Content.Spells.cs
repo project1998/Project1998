@@ -447,7 +447,10 @@ public static partial class Content
                   : SpellCosts.TryGetValue(s.Key, out var perClass)
                       ? (perClass.TryGetValue(basePath, out var cost) ? s with { Level = cost.Level } : null)
                       : (s.PathId == basePath || s.PathId == 0 ? s : null))
-              .Where(s => s is not null && s.Level <= maxLevel && !IsOutOfEraSplitTrap(s) && !IsNpcGrantedOnly(s))
+              // A PC subpath's own spells are nobody's to teach yet (IsPcSubpathSpell): without this a level-99
+              // member would be offered all of them, free, and every rebuild would hand them over.
+              .Where(s => s is not null && s.Level <= maxLevel && !IsOutOfEraSplitTrap(s) && !IsNpcGrantedOnly(s)
+                          && !IsPcSubpathSpell(s))
               .Select(s => s!)
               .GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
               .Select(g => g.OrderByDescending(s => s.Alignment == alignment).ThenBy(s => s.Level).First())
@@ -870,12 +873,17 @@ public static partial class Content
         set => Builder.PathRankByName = value;
     }
 
-    /// <summary>The paths a character may actually BE: the four base classes and Peasant, plus the four NPC
-    /// subpaths (Chung ryong / Baekho / Ju jak / Hyun moo). Everything else in Paths.csv is either RTK's GM
-    /// branch (5 Dreamweaver, 22 Archon) or a PC subpath (10-21 Barbarian … Muse) that this server does not
-    /// model — no spells, no promotion NPC, and in the PC subpaths' case a rank ladder that would silently
-    /// hand out the base class's secrets under the wrong titles.</summary>
-    public static readonly IReadOnlySet<int> PlayablePaths = new HashSet<int> { 0, 1, 2, 3, 4, 6, 7, 8, 9 };
+    /// <summary>The paths a character may actually BE: the four base classes and Peasant, the four NPC subpaths
+    /// (6-9 Chung ryong / Baekho / Ju jak / Hyun moo) and the twelve PC subpaths (10-21 Barbarian … Muse). The
+    /// only rows left out are RTK's GM branch, 5 Dreamweaver and 22 Archon.
+    /// <para>The PC subpaths joined this set with their foundation: a GM or one of the subpath's elders admits a
+    /// member (<c>@subpath</c>, Session.Subpaths.cs). In 2001 these were "Player Run Subpaths"
+    /// (tswolf.com/spells/pc.shtml, Wayback capture 2001-07-24) and RTK's NPC trial quests exist for only one
+    /// of the twelve, so membership is a grant, as the 2026-10-24 decision sheet settled (item 12). What a
+    /// member does NOT get yet is their subpath's own spells: no trainer teaches them and no rebuild hands them
+    /// over (<see cref="IsPcSubpathSpell"/>) until each subpath's hall teacher exists.</para></summary>
+    public static readonly IReadOnlySet<int> PlayablePaths =
+        new HashSet<int> { 0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 };
 
     public static bool IsPlayablePath(int pathId) => PlayablePaths.Contains(pathId);
 
@@ -899,6 +907,38 @@ public static partial class Content
 
     /// <summary>Subpath badge index for a path id (Paths.csv PthIcon) — see <see cref="PathIcon"/>.</summary>
     public static int PathIconOf(int pathId) => PathIcon.GetValueOrDefault(pathId, 0);
+
+    /// <summary>A PC subpath (10-21: Barbarian, Merchant, Diviner, Druid, Chongun, Ranger, Geomancer, Monk, Do,
+    /// Spy, Shaman, Muse) as against a base class, an NPC subpath or the GM rows. Paths.csv's own split, the
+    /// same one <see cref="IsNpcSubpath"/> reads: <c>PthIcon</c> 1-3 is a PC subpath's badge, 4 an NPC
+    /// subpath's, 0 everything else.</summary>
+    public static bool IsPcSubpath(int pathId) => PathIconOf(pathId) is >= 1 and < NpcSubpathIcon;
+
+    /// <summary>Is this spell one of a PC subpath's own (its <c>SplPthId</c> is one of the twelve)? Nobody
+    /// teaches these yet — the subpath halls are a later slice — so <see cref="SpellsForClass"/> drops them,
+    /// which keeps them out of every trainer's Learn Secret and Divine Secret lists and out of the character
+    /// rebuild. Testers use <c>@spell</c>.</summary>
+    public static bool IsPcSubpathSpell(SpellDef sp) => IsPcSubpath(sp.PathId);
+
+    /// <summary>The level a character must have reached before a GM or an elder may admit them to a PC
+    /// subpath. No 2001 page gives it; this is RTK's, which asks 50 for its one complete joining
+    /// (rtklua/Accepted/NPCs/subpaths/barbarian/ghengis_khan.lua, "You are too young to join at this time."
+    /// below 50), chosen over the NPC subpaths' 99 on the 2026-10-24 decision sheet (item 12).</summary>
+    public const int PcSubpathJoinLevel = 50;
+
+    // PthId -> PthChat, RTK class_db's `chat` column. Non-zero on the twelve PC subpaths (10-21) and the GM row
+    // Archon (22) only — the base classes and the four NPC subpaths all carry 0.
+    private static Dictionary<int, int> PathChat
+    {
+        get => _snapshotBuilder?.PathChat ?? Snapshot.PathChat;
+        set => Builder.PathChat = value;
+    }
+
+    /// <summary>May a character of this path use the subpath channel at all? RTK gates the "@" whisper route
+    /// on <c>classdb_chat(class)</c>, which is Paths.csv <c>PthChat</c>, and answers anyone else "You cannot
+    /// do that." (clif.c clif_parsewisp). Only the twelve PC subpaths and Archon pass; a base class or an NPC
+    /// subpath does not.</summary>
+    public static bool HasSubpathChat(int pathId) => PathChat.GetValueOrDefault(pathId) != 0;
 
     // PthId -> PthType, the BASE path a (sub)class descends from (RTK class_db.c classdb_path): every subpath
     // collapses onto 1 Warrior / 2 Rogue / 3 Mage / 4 Poet, e.g. Chung ryong (6) and Barbarian (10) are both

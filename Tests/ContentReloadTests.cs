@@ -469,7 +469,7 @@ public class ContentReloadTests
             TestProcessState.LoadContent();
             object beforeSnapshot = Content.SnapshotIdentityForTests;
             var before = SnapshotBackedFacades();
-            Assert.Equal(88, before.Count);
+            Assert.Equal(89, before.Count);
             Assert.Equal(64, before.Values.Count(entry => entry.Property.GetMethod!.IsPublic));
             int beforeEra = Shared.EraCalendar.RawDate;
             var beforeDoor = Doors.For(64000, 1, 1);
@@ -508,7 +508,7 @@ public class ContentReloadTests
 
                 Assert.Contains("Reload failed (previous content kept).", error.Message);
                 Assert.Same(beforeSnapshot, Content.SnapshotIdentityForTests);
-                Assert.Equal(88, Content.SnapshotMemberCountForTests);
+                Assert.Equal(89, Content.SnapshotMemberCountForTests);
                 Assert.Equal(beforeEra, Shared.EraCalendar.RawDate);
                 Assert.Same(beforeDoor, Doors.For(64000, 1, 1));
                 Assert.Equal(beforeHook, MobScript.Has("content_reload_probe", MobScript.OnSpawn));

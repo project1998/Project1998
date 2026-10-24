@@ -757,7 +757,12 @@ public sealed class ClassTrainerAbility : INpcAbility
         int cls = ctx.ClassId;
         if (cls <= 0)                    // Peasant (0) or unknown -> can choose this path
             yield return ($"Become a {_class}", Become);
-        else if (cls == _path)           // your own class's trainer -> teach/foresee its secrets
+        // Your own class's trainer -> teach/foresee its secrets. A PC-subpath member's own class here is its
+        // BASE class: RTK's learnSpell gives "regular path and pc subpaths" getUnknownSpells(player.baseClass)
+        // (rtklua/Accepted/Scripts/Spells.lua), so a member admitted at 50 can still learn 51-99. Their
+        // subpath's own spells are not in that list (Content.IsPcSubpathSpell) until the hall teachers exist.
+        // An NPC subpath is left as it was.
+        else if (cls == _path || (Content.IsPcSubpath(cls) && ctx.BasePathId == _path))
         {
             yield return ("Learn Secret", LearnSecret);
             yield return ("Divine Secret", DivineSecret);

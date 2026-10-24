@@ -116,11 +116,12 @@ public static partial class Content
             MinorQuests = LoadMinorQuests(T(Spec(TableId.MinorQuests)));
             ShopStock = LoadShopStock(T(Spec(TableId.ShopStock)));
             ShopBuysFrom = LoadShopBuysFrom(T(Spec(TableId.ShopBuysFrom)));
-            var (paths, pathRanks, pathBase, pathIcon) = LoadPaths(T(Spec(TableId.Paths)));
+            var (paths, pathRanks, pathBase, pathIcon, pathChat) = LoadPaths(T(Spec(TableId.Paths)));
             Paths = paths;
             PathRanks = pathRanks;
             PathBase = pathBase;
             PathIcon = pathIcon;
+            PathChat = pathChat;
             LevelExp = LoadLevelExp(T(Spec(TableId.LevelExp)));
             var spellLevelOverrides = LoadSpellLevels(T(Spec(TableId.SpellLevels)));
             SpellLevelOverrides = spellLevelOverrides;

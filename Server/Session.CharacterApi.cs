@@ -1523,10 +1523,16 @@ public sealed partial class Session : QuestState.ISessionStore
     {
         int p = CharClassId;
         if (p < 0) return new();
+        int relearn = RelearnPathId(p);
         return Content.SpellsForClass(p, _char.Level, _char.Alignment, _char.Mark)
                       .Where(s => !_char.Spells.Contains(s.Id))
-                      .Where(s => Content.CanRelearnAtNpc(s, p)).ToList();
+                      .Where(s => Content.CanRelearnAtNpc(s, relearn)).ToList();
     }
+
+    /// <summary>The path whose relearn rows (<see cref="Content.CanRelearnAtNpc"/>) apply to this character: a
+    /// PC-subpath member is taught its BASE class's list (RTK learnSpell: getUnknownSpells(player.baseClass)),
+    /// so a forgotten Soothe is relearned on the base class's row, which the subpath has none of.</summary>
+    private static int RelearnPathId(int pathId) => Content.IsPcSubpath(pathId) ? Content.PathBaseOf(pathId) : pathId;
 
     /// <summary>Spells this class will unlock at a HIGHER level (RTK "Divine Secret" preview) — not yet
     /// learnable. Ordered by level. Windowed to the next <paramref name="levelsAhead"/> insights the way RTK's
@@ -1536,9 +1542,10 @@ public sealed partial class Session : QuestState.ISessionStore
     {
         int p = CharClassId;
         if (p < 0) return new();
+        int relearn = RelearnPathId(p);
         return Content.SpellsForClass(p, _char.Level + levelsAhead, _char.Alignment, _char.Mark)
                       .Where(s => s.Level > _char.Level && !_char.Spells.Contains(s.Id))
-                      .Where(s => Content.CanRelearnAtNpc(s, p))
+                      .Where(s => Content.CanRelearnAtNpc(s, relearn))
                       .OrderBy(s => s.Level).ThenBy(s => s.Name).ToList();
     }
 
@@ -1566,14 +1573,23 @@ public sealed partial class Session : QuestState.ISessionStore
     {
         int old = _char.Spells.Count;
         if (!_char.Spells.Remove(spellId)) return;
-        for (int slot = old - 1; slot >= 0; slot--)
+        RedrawSpellbook(old);
+        SaveChar();
+    }
+
+    /// <summary>Redraw the client's book after entries were removed from <see cref="Character.Spells"/>: clear
+    /// all <paramref name="oldCount"/> slots it was showing, then send the list as it is now, so every later
+    /// entry lands in its new slot. Shared by <see cref="ForgetOneSpell"/> and leaving a PC subpath, which
+    /// takes several at once and redraws once.</summary>
+    private void RedrawSpellbook(int oldCount)
+    {
+        for (int slot = oldCount - 1; slot >= 0; slot--)
             SendMap(ServerOp.RemoveSpell, _gameInc++, new byte[] { (byte)(slot + 1) }, $"removespell(0x18) slot={slot}");
         for (int i = 0; i < _char.Spells.Count; i++)
         {
             var sp = Content.SpellById(_char.Spells[i]);
             if (sp is not null) SendAddSpell(i, sp);
         }
-        SaveChar();
     }
 
     /// <summary>Send the player a status/minitext line (RTK sendMinitext).</summary>

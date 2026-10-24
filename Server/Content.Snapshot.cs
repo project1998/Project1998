@@ -195,6 +195,7 @@ public static partial class Content
         internal IReadOnlyDictionary<string, (int PathId, int Mark)> PathRankByName { get; set; } =
             new Dictionary<string, (int, int)>(StringComparer.OrdinalIgnoreCase);
         internal Dictionary<int, int> PathIcon { get; set; } = new();
+        internal Dictionary<int, int> PathChat { get; set; } = new();
         internal Dictionary<int, int> PathBase { get; set; } = new();
         internal IReadOnlyDictionary<string, int> RageAmount { get; set; } =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -308,6 +309,7 @@ public static partial class Content
             PathRanks = builder.PathRanks;
             PathRankByName = builder.PathRankByName;
             PathIcon = builder.PathIcon;
+            PathChat = builder.PathChat;
             PathBase = builder.PathBase;
             RageAmount = builder.RageAmount;
             EnchantSpells = builder.EnchantSpells;
@@ -398,6 +400,7 @@ public static partial class Content
         internal Dictionary<int, string[]> PathRanks { get; }
         internal IReadOnlyDictionary<string, (int PathId, int Mark)> PathRankByName { get; }
         internal Dictionary<int, int> PathIcon { get; }
+        internal Dictionary<int, int> PathChat { get; }
         internal Dictionary<int, int> PathBase { get; }
         internal IReadOnlyDictionary<string, int> RageAmount { get; }
         internal IReadOnlyDictionary<string, (double Amt, int Mana)> EnchantSpells { get; }
