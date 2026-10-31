@@ -51,8 +51,16 @@ public sealed class Character
     public byte   ArmorColor = 0;
 
     // Mounted on a horse — renders as the 0x33 type-0 appearance[1] form byte = 3 (the client swaps the
-    // human sprite for the horse+rider composite, SPR ids 344/345). Session-visual only; not persisted.
+    // human sprite for the horse+rider composite, SPR ids 344/345). Persisted, as every public field here is
+    // (CharacterStore serializes fields), so a rider who logs out mounted logs back in mounted.
     public bool   Mounted = false;
+
+    // The creature the rider sits on (its mobs.csv key), which the dismount sets down again: RTK keeps the ridden
+    // creature's id in the saved registry (registry["mountMobId"], rtklua/Accepted/Scripts/on_event.lua), so a stag
+    // ridden across a relog comes back a stag (the project owner, 2026-10-31, "As RTK"). Written by the ride key,
+    // cleared wherever Mounted is cleared (the dismount, death, the GM toggle). Empty is a horse: the GM toggle's
+    // mount, and an older row that has no such field.
+    public string MountKey = "";
 
     // Wielded weapon — renders as the 0x33 type-0 appearance[5] slot (look-lab: 0=unarmed, then
     // Honor sword / Flame blade / Electra / Steelthorn / Blood / Primogen …). Also drives the melee

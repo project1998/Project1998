@@ -667,8 +667,14 @@ shamans_solace,20,99,10000,mountain_ginseng,1,,,,,,,rtk-lua
 phoenix_flames,20,64,500,acorn,70,amber,1,,,,,rtk-lua
 reincarnate,20,64,500,acorn,70,amber,1,,,,,rtk-lua
 shamans_torment,20,0,0,,,,,,,,,rtk-lua
+control_flames,13,99,20000,wicked_staff,1,antler,20,,,,,rtk-lua
+druids_rodent,13,33,0,rat_meat,30,rabbit_meat,20,,,,,rtk-lua
+steed,13,99,0,,,,,,,,,rtk-lua
 lightning_storm,13,99,0,rat_meat,30,rabbit_meat,20,,,,,rtk-lua
+sea_breeze,13,33,0,rat_meat,30,rabbit_meat,20,,,,,rtk-lua
+natures_bloom,13,99,20000,wicked_staff,1,antler,20,,,,,rtk-lua
 earth_strike,13,99,0,gold_acorn,1,topaz,1,,,,,rtk-lua
+energy_bloom,13,99,0,gold_acorn,1,topaz,1,,,,,rtk-lua
 natures_smite,13,99,0,gold_acorn,1,topaz,1,,,,,rtk-lua
 song_of_the_goddess,21,0,0,,,,,,,,,rtk-lua
 sacred_verse,21,30,0,scroll,1,ink,1,,,,,rtk-lua

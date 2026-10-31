@@ -366,6 +366,7 @@ public sealed partial class Session
     private void ToggleMount(CommandArgs a)
     {
         _char.Mounted = a.Toggle(0, _char.Mounted);
+        _char.MountKey = "";                                              // the toggle's mount is always a horse
         RefreshAppearance();                                              // redraw self on the horse + everyone watching
         Reply(_char.Mounted ? "The powerful steed takes you where you want to go."   // same lines as the
                                    : "You precariously step again onto the ground.");       // real 'r' ride key
@@ -594,21 +595,28 @@ public sealed partial class Session
     // attack uses — RTK has no 8-way/diagonal reach and neither does the player's own swing) and despawns it
     // (ridden away, no loot/exp — see World.DespawnMob). Dismounting sets a fresh horse back down on the
     // first free tile clockwise from the one you face (see DismountTile).
+    // ARAWN'S STAG RIDES TOO (Druid's Steed): RTK's onMount takes either a `horse` or an `arawns_stag`
+    // (RTK Scripts/on_event.lua:353-377), and its onDismount sets down again the creature that was ridden, by the
+    // mount's id it kept in its saved registry (:379-465). So the creature ridden is kept with the character
+    // (Character.MountKey, saved: the project owner, 2026-10-31, "As RTK") and set down at the dismount, after a relog too.
+    // On 4.95 a rider on either is drawn on a horse: the mounted form is one horse-and-rider frame of the worn body
+    // art, with no second mount to draw (RTK draws the stag's rider as look 126).
     private void TryRideHorse()
     {
         if (!_char.Mounted)
         {
             var (hx, hy) = FrontTile();
-            var horse = _world.MobNear(_char.Map, hx, hy, 0, mo => mo.Key == "horse");   // radius 0 = exact tile
+            var horse = _world.MobNear(_char.Map, hx, hy, 0, mo => mo.Key is "horse" or "arawns_stag");   // radius 0 = exact tile
             // The three ride lines are the real game's, verbatim (they aren't in the client's Inter.dat line
             // table, so they were always server-sent — ours were stand-ins). This is the 'r' KEY, not a
             // command, so it sends its own status-pane lines rather than going through Reply.
             if (horse is null) { SendMiniText("Good try, but there is nothing here that you can ride."); return; }
             _world.DespawnMob(_char.Map, horse);
             _char.Mounted = true;
+            _char.MountKey = horse.Key;
             RefreshAppearance();
             SendMiniText("The powerful steed takes you where you want to go.");
-            Log.Info($"   -> MOUNT on (rode away world horse {horse.Id})");
+            Log.Info($"   -> MOUNT on (rode away world {horse.Key} {horse.Id})");
         }
         else
         {
@@ -616,15 +624,17 @@ public sealed partial class Session
             RefreshAppearance();
             SendMiniText("You precariously step again onto the ground.");
 
-            var def = Content.Mobs.FirstOrDefault(m => m.Key == "horse");
+            string key = _char.MountKey is { Length: > 0 } ridden ? ridden : "horse";   // empty: a horse (the GM toggle, an older row)
+            _char.MountKey = "";
+            var def = Content.Mobs.FirstOrDefault(m => m.Key == key);
             if (def is not null)
             {
                 var (x, y, dir) = DismountTile();
                 SummonWorldMob(def.Look, x, y, def.Name, def.Hp, dir: dir,
                                 color: def.Color, exp: def.Exp, moveTime: def.MoveTime, key: def.Key, def: def);
-                Log.Info($"   -> MOUNT off (set horse down at {x},{y} dir {dir})");
+                Log.Info($"   -> MOUNT off (set {key} down at {x},{y} dir {dir})");
             }
-            else Log.Info("   -> MOUNT off (no 'horse' MobDef — nothing set down)");
+            else Log.Info($"   -> MOUNT off (no '{key}' MobDef — nothing set down)");
         }
     }
 

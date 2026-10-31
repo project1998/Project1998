@@ -25,6 +25,9 @@ public static class SpellScript
 
     public static bool HasVerb(string verb) => _host.HasVerb(verb);
 
+    /// <summary><see cref="HasVerb"/> without the Lua gate (<see cref="LuaVerbHost.HasVerbUngated"/>).</summary>
+    public static bool HasVerbUngated(string verb) => _host.HasVerbUngated(verb);
+
     /// <summary>The empty row an archetype-style call runs against: those verbs take their numbers off
     /// <c>ctx</c> rather than a CSV row. A single stable instance keeps LuaVerbHost's per-row Table cache warm
     /// (it is keyed by row identity).</summary>

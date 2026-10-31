@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using Server;
 using Shared;
@@ -152,7 +153,18 @@ public sealed class SubpathTeacherTests
                              "vanish 99 0 [1 fox_tail, 1 topaz]")]
     [InlineData("Geomancer", "hailstorm 64 500 [1 amber, 70 acorn]; ice_bombardment 99 500 [1 amber, 70 acorn]")]
     [InlineData("Shaman",    "phoenix_flames 64 500 [1 amber, 70 acorn]; reincarnate 64 500 [1 amber, 70 acorn]; shamans_solace 99 10000 [1 mountain_ginseng]; shamans_torment 0 0 []")]
-    [InlineData("Druid",     "earth_strike 99 0 [1 gold_acorn, 1 topaz]; lightning_storm 99 0 [20 rabbit_meat, 30 rat_meat]; natures_smite 99 0 [1 gold_acorn, 1 topaz]")]
+    // The Druid spells slice: Control flames, Druid's rodent, Steed, Sea breeze, Nature's bloom and Energy bloom beside the
+    // three, each at its script's price, the copied lists as written (Sea breeze asks Druid's rodent's, Nature's bloom
+    // Control flames'); Steed's list is empty; Efflorescence, with no script, off sale.
+    [InlineData("Druid",     "control_flames 99 20000 [1 wicked_staff, 20 antler]; " +
+                             "druids_rodent 33 0 [20 rabbit_meat, 30 rat_meat]; " +
+                             "earth_strike 99 0 [1 gold_acorn, 1 topaz]; " +
+                             "energy_bloom 99 0 [1 gold_acorn, 1 topaz]; " +
+                             "lightning_storm 99 0 [20 rabbit_meat, 30 rat_meat]; " +
+                             "natures_bloom 99 20000 [1 wicked_staff, 20 antler]; " +
+                             "natures_smite 99 0 [1 gold_acorn, 1 topaz]; " +
+                             "sea_breeze 33 0 [20 rabbit_meat, 30 rat_meat]; " +
+                             "steed 99 0 []")]
     [InlineData("Monk",      "")]
     [InlineData("Muse",      "costume 0 0 []; sacred_verse 30 0 [1 ink, 1 scroll]; song_of_the_goddess 0 0 []; tranquil_symphony 30 0 [1 ink, 1 scroll]")]
     public void EachTeacherSellsTheWorkingSpellsAtRtksScriptPrices(string subpath, string expected)
@@ -255,9 +267,10 @@ public sealed class SubpathTeacherTests
         var (s, o, c) = Member("Druid", 99, ch => Give(ch, "topaz", 1));
         int before = c.Spells.Count;
 
-        Converse(s, Teacher("Druid"), "Learn Secret", Pick(1), Pick(1), Pick(1));
+        Converse(s, Teacher("Druid"), "Learn Secret", Pick(4), Pick(1), Pick(1));
 
-        Assert.Equal("Which secret shall I teach you?|Earth strike|Lightning storm|Nature's smite", Menus(o)[0]);
+        Assert.Equal("Which secret shall I teach you?|Druid's rodent|Sea breeze|Control flames|Earth strike|Lightning storm|" +
+                     "Nature's bloom|Nature's smite|Steed", Menus(o)[0]);
         Assert.Equal(new[] { "Paying for what you want is a sign of devotion. Return when you have what is required for this." }, Boxes(o));
         Assert.Equal((1, before), (Count(c, "topaz"), c.Spells.Count));
     }
@@ -278,7 +291,7 @@ public sealed class SubpathTeacherTests
         });
         Assert.Equal(Content.SpellBookCap, c.Spells.Count);
 
-        Converse(s, Teacher("Druid"), "Learn Secret", Pick(3), Pick(1), Pick(1));
+        Converse(s, Teacher("Druid"), "Learn Secret", Pick(7), Pick(1), Pick(1));
 
         Assert.StartsWith("The fee to learn Nature's smite is:", Menus(o)[2]);
         Assert.Equal(new[] { "Your mind cannot hold any more secrets right now." }, Boxes(o));
@@ -483,15 +496,18 @@ public sealed class SubpathTeacherTests
         Assert.False(Keeps(17, strike));   // @class Monk
     }
 
-    /// <summary>The most subpath spells a member can hold today is what their teacher sells (three, for a Druid), and
-    /// every PC subpath's rebuilt book with all of them, at every alignment and rank and every Sage rung, still fits
-    /// the client's 52 slots, keeping each. Red without the keep (they are not in the book). The worst case is written
-    /// to the output.</summary>
+    /// <summary>The most subpath spells a member can hold today is what their teacher sells (nine, for a Druid), and
+    /// every PC subpath's rebuilt book with all of them, at every alignment and rank and every Sage rung, keeps each and
+    /// holds everything else it is owed up to the client's 52 slots, no further. A rank-2 or rank-3 Druid is owed 53 or
+    /// 57: the base spells their book did not hold give way (the project owner, 2026-10-31, "Subpath spells stay";
+    /// <see cref="ARebuildPastTheCapKeepsEveryHeldSpell"/> pins which). Red without the keep (they are not in the book),
+    /// and with the rebuild's old order (a Druid's 53 and 57 slots). Each subpath's largest set owed is written to the
+    /// output.</summary>
     [Fact]
     public void TheMostAMemberCanHoldTodayFitsTheBook()
     {
         var problems = new List<string>();
-        var sizes = new List<(int Count, int Path, int Alignment, int Mark, int Held)>();
+        var sizes = new List<(int Count, int Owed, int Path, int Alignment, int Mark, int Held)>();
         foreach (var c in SubpathCircles.All)
         {
             var held = Content.SubpathTeacherSpells(c.Subpath, Content.MarkSpellLevel, Content.MaxMark);
@@ -501,16 +517,252 @@ public sealed class SubpathTeacherTests
                     var book = Content.RespecSpellSet(c.Subpath, Content.MarkSpellLevel, alignment, mark,
                                                       dogFlag: Content.CanLearnDogSpells(c.Subpath),
                                                       sageRung: Content.SageLadder.Length, held: held);
-                    sizes.Add((book.Count, c.Subpath, alignment, mark, held.Count));
+                    int owed = Content.RespecSpellSet(c.Subpath, Content.MarkSpellLevel, alignment, mark,
+                                                      dogFlag: Content.CanLearnDogSpells(c.Subpath),
+                                                      sageRung: Content.SageLadder.Length).Count + held.Count;
+                    sizes.Add((book.Count, owed, c.Subpath, alignment, mark, held.Count));
                     foreach (var sp in held.Where(h => book.All(b => b.Id != h.Id)))
                         problems.Add($"{Content.PathName(c.Subpath)} a{alignment} m{mark}: {sp.Key} not kept");
-                    if (book.Count > Content.SpellBookCap)
-                        problems.Add($"{Content.PathName(c.Subpath)} a{alignment} m{mark}: {book.Count} slots");
+                    if (book.Count != Math.Min(owed, Content.SpellBookCap))
+                        problems.Add($"{Content.PathName(c.Subpath)} a{alignment} m{mark}: {book.Count} slots of {owed} owed");
                 }
         }
-        foreach (var s in sizes.Where(s => s.Mark == Content.MaxMark && s.Alignment == 0).OrderByDescending(s => s.Count))
-            _out.WriteLine($"{Content.PathName(s.Path)}: {s.Count} of {Content.SpellBookCap} with {s.Held} held");
-        _out.WriteLine($"largest: {sizes.Max(s => s.Count)}");
+        foreach (var s in sizes.Where(s => s.Mark == Content.MaxMark && s.Alignment == 0).OrderByDescending(s => s.Owed))
+            _out.WriteLine($"{Content.PathName(s.Path)}: {s.Count} of {Content.SpellBookCap}, {s.Owed} owed, with {s.Held} held");
+        _out.WriteLine($"largest owed: {sizes.Max(s => s.Owed)}");
+        Assert.True(problems.Count == 0, string.Join("\n", problems));
+    }
+
+    /// <summary>The rebuild past the cap (the project owner, 2026-10-31, "Subpath spells stay"): a rank-3 Druid holding
+    /// all nine Druid spells, who forgot as many Poet spells as made room for them (and two more, in the second case),
+    /// renounces (a shrine's rebuild at the alignment they have). All nine stay, every spell the book held stays, the
+    /// book is full at 52, and of the Poet spells they had forgotten only as many come back as there is room for, the
+    /// first in the rebuild's order. Red with the rebuild's old order (held subpath spells last, cut at 52): the last
+    /// Druid spells go.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void ARebuildPastTheCapKeepsEveryHeldSpell(int room)
+    {
+        int druid = Content.PathIdForClass("Druid");
+        var nine = Content.SubpathTeacherSpells(druid, Content.MarkSpellLevel, Content.MaxMark);
+        var owed = Content.RespecSpellSet(druid, 99, alignment: 0, mark: 3);
+        Assert.Equal(9, nine.Count);
+        Assert.True(owed.Count + nine.Count > Content.SpellBookCap,
+                    $"a rank-3 Druid is owed {owed.Count} + {nine.Count}, inside the {Content.SpellBookCap}-slot book");
+        int forgot = owed.Count + nine.Count - Content.SpellBookCap + room;
+        var forgotten = owed.Skip(owed.Count / 2).Take(forgot).ToList();   // from the middle of the Poet list
+        var book = owed.Where(sp => !forgotten.Contains(sp)).Concat(nine).Select(sp => sp.Id).ToList();
+        var (s, _, c) = Member("Druid", 99, ch => { ch.Mark = 3; ch.Spells.AddRange(book); });
+        Assert.Equal(Content.SpellBookCap - room, c.Spells.Count);
+        var shrineDef = Content.NpcById(188)!;   // the Kwi-Sin shrine's shaman
+        var ctx = new NpcContext(s, TeacherMob(shrineDef), shrineDef);
+
+        s.WithState(() => ctx.Devote(0));
+
+        var lost = book.Where(id => !c.Spells.Contains(id)).Select(id => Content.SpellById(id)!.Key).ToList();
+        var back = forgotten.Where(f => c.Spells.Contains(f.Id)).Select(f => f.Key).ToList();
+        Assert.True(lost.Count == 0 && c.Spells.Count == Content.SpellBookCap
+                    && back.SequenceEqual(forgotten.Take(room).Select(f => f.Key)),
+                    $"{c.Spells.Count} slots; lost [{string.Join(", ", lost)}]; back [{string.Join(", ", back)}] of forgotten " +
+                    $"[{string.Join(", ", forgotten.Select(f => f.Key))}]");
+    }
+
+    /// <summary>A rung of a ladder the book held stays at the cut (#417's review, F3). A rank-3 Druid's book holds all nine
+    /// Druid spells and the Poet set owed less as many entries as made room for them, with a lower rung in place of its
+    /// ladder's top. The rebuild keeps only the top rung of a ladder, so it hands back the top, which the book did not hold
+    /// as a spell; it holds its ladder, so the top counts as held and stays, and the lower rung is the only entry of the
+    /// book the rebuild leaves out (it is the top's ladder). Red with a ladder not counted: the cut leaves the top out too,
+    /// and the member holds neither rung (the review's theory, ported).</summary>
+    [Theory]
+    [InlineData("water_of_life_poet", "revitalize_poet")]
+    [InlineData("heavens_kiss_poet", "remedy_poet")]
+    [InlineData("flare_poet", "earthquake_poet")]
+    public void ARebuildPastTheCapKeepsARungOfAHeldLadder(string top, string lower)
+    {
+        int druid = Content.PathIdForClass("Druid");
+        var nine = Content.SubpathTeacherSpells(druid, Content.MarkSpellLevel, Content.MaxMark);
+        var owed = Content.RespecSpellSet(druid, 99, alignment: 0, mark: 3);
+        var t = owed.FirstOrDefault(sp => sp.Key == top);
+        var l = Content.SpellByKey(lower);
+        Assert.True(t is not null && l is not null, $"top {top} owed {t is not null}, lower {lower} exists {l is not null}");
+        var forgotten = owed.Where(sp => sp.Id != t!.Id).Take(owed.Count + nine.Count - Content.SpellBookCap).ToList();
+        var book = owed.Where(sp => sp.Id != t!.Id && !forgotten.Contains(sp)).Append(l!).Concat(nine).ToList();
+        var rebuilt = Content.RespecSpellSet(druid, 99, alignment: 0, mark: 3, held: book);
+        bool keepsTop = rebuilt.Any(sp => sp.Id == t!.Id);
+        var lost = book.Where(b => rebuilt.All(r => r.Id != b.Id)).Select(b => b.Key).ToList();
+        Assert.True(keepsTop && lost.SequenceEqual(new[] { lower }) && rebuilt.Count == Content.SpellBookCap,
+                    $"book {book.Count}, rebuilt {rebuilt.Count}; top {top} kept {keepsTop}; held and lost [{string.Join(", ", lost)}]");
+    }
+
+    /// <summary>A devote or a renounce past the cap keeps every spell the book held, in the new alignment's version
+    /// (#417's re-check, F4). The rebuild runs at the new alignment, so a held spell comes back as that alignment's
+    /// version, under another id. A rank-3 Druid in alignment <paramref name="from"/> holds all nine Druid spells and that
+    /// alignment's Poet set owed, less as many entries as made room for them (52 in all), and devotes at the Kwi-Sin
+    /// shrine to <paramref name="to"/> (to 0: a renounce; <c>NpcContext.Devote</c>, <c>Session.SwapAlignment</c>,
+    /// <c>SyncSpellbook</c>). Of what the new alignment owes, nothing whose spell the book held (in any version, by the
+    /// content's alignment families) is cut; all nine stay; the book is full at 52. From 0 to 1 the pairs are named:
+    /// Resurrect becomes Return Spirit (<c>game-data/Spells.csv</c> ids 4138, 4139) and Ensure becomes Spirit Shield
+    /// (4162, 4163). Red with a spell counted held by its own id only: the cut takes the new versions of held level-99
+    /// spells and hands the forgotten ones back (the re-check's probe, ported). It judges by the content's families,
+    /// which cannot see a row they link wrongly (the re-check's F6);
+    /// <see cref="ADevoteAtAShrineOrARenounceAtTheSummitKeepsRtksVersionOfEveryHeldSpell"/> judges by pairs it names
+    /// itself.</summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(0, 2)]
+    [InlineData(0, 3)]
+    [InlineData(1, 0)]
+    public void ADevoteOrRenouncePastTheCapKeepsEveryHeldSpellInItsNewAlignment(int from, int to)
+    {
+        int druid = Content.PathIdForClass("Druid");
+        var nine = Content.SubpathTeacherSpells(druid, Content.MarkSpellLevel, Content.MaxMark);
+        var owedFrom = Content.RespecSpellSet(druid, 99, alignment: from, mark: 3);
+        var owedTo = Content.RespecSpellSet(druid, 99, alignment: to, mark: 3);
+        int forgot = owedFrom.Count + nine.Count - Content.SpellBookCap;
+        Assert.True(forgot > 0, $"a rank-3 Druid in alignment {from} is owed {owedFrom.Count} + {nine.Count}, inside the book");
+        var forgotten = owedFrom.Take(forgot).ToList();
+        var book = owedFrom.Where(sp => !forgotten.Contains(sp)).Concat(nine).Select(sp => sp.Id).ToList();
+        var (s, _, c) = Member("Druid", 99, ch => { ch.Mark = 3; ch.Alignment = (byte)from; ch.Spells.AddRange(book); });
+        Assert.Equal(Content.SpellBookCap, c.Spells.Count);
+        var shrineDef = Content.NpcById(188)!;   // the Kwi-Sin shrine's shaman
+        var ctx = new NpcContext(s, TeacherMob(shrineDef), shrineDef);
+
+        s.WithState(() => ctx.Devote(to));
+
+        var family = (Dictionary<string, string>)typeof(Content)
+            .GetMethod("BuildAlignFamilies", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, new object[] { Content.Spells })!;
+        string F(SpellDef sp) => family.TryGetValue(sp.Key, out var leader) ? leader : sp.Key;
+        var bookF = book.Select(id => F(Content.SpellById(id)!)).ToHashSet();
+        var nowF = c.Spells.Select(id => F(Content.SpellById(id)!)).ToHashSet();
+        var heldCut = owedTo.Where(sp => bookF.Contains(F(sp)) && !nowF.Contains(F(sp))).Select(sp => $"{sp.Key}(lv{sp.Level})").ToList();
+        var lostNine = nine.Where(n => !c.Spells.Contains(n.Id)).Select(n => n.Key).ToList();
+        var named = from == 0 && to == 1
+            ? new[] { "return_spirit_poet", "spirit_shield_poet" }.Where(k => !c.Spells.Contains(Content.SpellByKey(k)!.Id)).ToList()
+            : new List<string>();
+        Assert.True(c.Alignment == to && heldCut.Count == 0 && lostNine.Count == 0 && named.Count == 0
+                    && c.Spells.Count == Content.SpellBookCap,
+                    $"{from} to {to}: alignment now {c.Alignment}, {c.Spells.Count} slots; held but cut [{string.Join(", ", heldCut)}]; " +
+                    $"Druid spells lost [{string.Join(", ", lostNine)}]; named versions missing [{string.Join(", ", named)}]");
+    }
+
+    /// <summary>RTK's four versions of the Poet spells the next fact names, copied from its swap lists here rather than
+    /// read from the server's table (<c>rtklua/Accepted/Scripts/swapAlignment.lua</c>, unaligned, Kwi-Sin, Ming-Ken and
+    /// Ohaeng; a swap turns a held spell into the same row's spell of the new alignment, lines 531-537). Each row's four
+    /// lines are given. The Caterpillar's Ming-Ken version is the one RTK's Caterpillar script defines
+    /// (<c>rtklua/Accepted/Spells/poet/cotw_caterpillar.lua</c>:99); the list writes Kwi-Sin's word at line 379.</summary>
+    private static readonly string[][] RtkPoetVersions =
+    {
+        new[] { "purge_poet", "cure_illness_poet", "restore_health_poet", "remove_poison_poet" },              // 92, 209, 326, 443
+        new[] { "invoke_poet", "spirits_power_poet", "life_force_poet", "gather_magic_poet" },                  // 97, 214, 331, 448
+        new[] { "resurrect_poet", "return_spirit_poet", "mingken_blessing_poet", "death_undone_poet" },        // 139, 256, 373, 490
+        new[] { "cotw_caterpillar_poet", "kwisin_companion_poet", "mingken_companion_poet", "ohaeng_companion_poet" },
+                                                                                                                // 145, 262, 379, 496
+        new[] { "cotw_fluffy_dog_poet", "kwisin_assistant_poet", "mingken_assistant_poet", "ohaeng_assistant_poet" },
+                                                                                                                // 146, 263, 380, 497
+        new[] { "cotw_panda_bear_poet", "kwisin_protector_poet", "mingken_protector_poet", "ohaeng_protector_poet" },
+                                                                                                                // 147, 264, 381, 498
+        new[] { "cotw_wild_monkey_poet", "kwisin_fighter_poet", "mingken_fighter_poet", "ohaeng_fighter_poet" }, // 148, 265, 382, 499
+        new[] { "cotw_gorilla_poet", "kwisin_warrior_poet", "mingken_warrior_poet", "ohaeng_warrior_poet" },     // 149, 266, 383, 500
+        new[] { "cotw_wind_dancer_poet", "kwisin_champion_poet", "mingken_champion_poet", "ohaeng_champion_poet" },
+                                                                                                                // 150, 267, 384, 501
+        new[] { "cotw_wind_warrior_poet", "kwisin_avatar_poet", "mingken_avatar_poet", "ohaeng_avatar_poet" },   // 151, 268, 385, 502
+    };
+
+    /// <summary>A devote at an alignment's shrine, or a renounce at the summit, past the cap keeps the new alignment's
+    /// version of every spell the book held (#417's re-check, F6; its N6 probe, ported). A rank-3 Druid in alignment
+    /// <paramref name="from"/> holds all nine Druid spells and that alignment's Poet set owed less its first entries, as
+    /// many as made room for the nine (52 in all). From Unaligned they answer the catechism of the shrine of
+    /// <paramref name="to"/> to its end and dedicate for life (<c>AlignmentAbility</c>); to Unaligned they say "cleanse
+    /// curse" to the Tiger Palace summit's shaman and take his help (<c>SummitAbility</c>). Both end in
+    /// <c>NpcContext.Devote</c>, which rebuilds the book at the new alignment. The pairs are named here, not read from the
+    /// server: RTK's swap lists for the Poet spells (<see cref="RtkPoetVersions"/>) and the live poet page's Sam san
+    /// families (<see cref="SamSanAlignedRowTests.Families"/>). Of each named spell the book held, the new alignment's
+    /// version is in the book; of the spells the book had forgotten, none comes back (the new alignment owes as many, so
+    /// there is no room); all nine Druid spells stay; the book is full at 52. Red with the content's adjacency families
+    /// deciding held (ccfa08b): from Unaligned the new versions of the Gorilla, the Wind dancer, the Wind warrior and
+    /// Charge of Life are cut and four forgotten spells come back; a renounce cuts the Wild monkey's, the Wind dancer's,
+    /// the Wind warrior's and Charge of Life's.</summary>
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(0, 2)]
+    [InlineData(0, 3)]
+    [InlineData(1, 0)]
+    [InlineData(2, 0)]
+    [InlineData(3, 0)]
+    public void ADevoteAtAShrineOrARenounceAtTheSummitKeepsRtksVersionOfEveryHeldSpell(int from, int to)
+    {
+        int druid = Content.PathIdForClass("Druid");
+        var nine = Content.SubpathTeacherSpells(druid, Content.MarkSpellLevel, Content.MaxMark);
+        var owedFrom = Content.RespecSpellSet(druid, 99, alignment: from, mark: 3);
+        int forgot = owedFrom.Count + nine.Count - Content.SpellBookCap;
+        Assert.True(forgot > 0, $"a rank-3 Druid in alignment {from} is owed {owedFrom.Count} + {nine.Count}, inside the book");
+        Assert.Equal(owedFrom.Count, Content.RespecSpellSet(druid, 99, alignment: to, mark: 3).Count);
+        var forgotten = owedFrom.Take(forgot).ToList();
+        var book = owedFrom.Where(sp => !forgotten.Contains(sp)).Concat(nine).Select(sp => sp.Id).ToList();
+        var versions = RtkPoetVersions
+            .Concat(SamSanAlignedRowTests.Families.Where(f => f.Base.EndsWith("_poet", StringComparison.Ordinal))
+                                                  .Select(f => f.Rows.Select(r => r.Key).Prepend(f.Base).ToArray()))
+            .ToList();
+        string[]? RowOf(string key) => versions.FirstOrDefault(v => v.Contains(key));
+        bool Held(string key) => book.Contains(Content.SpellByKey(key)!.Id);
+        // Soothe and Gateway are one row at every alignment; every other forgotten spell is named, so "back" is judged;
+        // and every named spell not forgotten is held, so "kept" is judged for each.
+        foreach (var f in forgotten)
+            Assert.True(f.Alignment < 0 || RowOf(f.Key) is not null, $"the forgotten {f.Key} is not named here");
+        var heldRows = versions.Where(v => !forgotten.Any(f => v.Contains(f.Key))).ToList();
+        Assert.True(heldRows.All(v => Held(v[from])),
+                    $"not in the book: {string.Join(", ", heldRows.Where(v => !Held(v[from])).Select(v => v[from]))}");
+        var (s, _, c) = Member("Druid", 99, ch =>
+        {
+            ch.Mark = 3;
+            ch.Alignment = (byte)from;
+            ch.MaxHp = 30_000; ch.MaxMp = 20_000;     // the summit's floor is 20,000 and 10,000
+            ch.Spells.AddRange(book);
+        });
+        Assert.Equal(Content.SpellBookCap, c.Spells.Count);
+
+        if (to != 0)
+        {
+            int map = AlignmentAbility.Shrines.Single(kv => kv.Value.Align == to).Key;
+            var shrine = Content.Npcs.Single(n => n.Key == "AlignmentNpc" && n.Map == map);
+            int aspect = to switch { 1 => 3, 2 => 1, _ => 2 };   // the afterlife, the living, the balance of all
+            Converse(s, shrine, "Speak", NextFrame(), NextFrame(), NextFrame(), Pick(3), NextFrame(), Pick(aspect),
+                     NextFrame(), Pick(4));
+        }
+        else
+            SayTo<SummitAbility>(s, Content.Npcs.Single(n => n.Key == "SummitNpc"), "cleanse curse",
+                                 NextFrame(), NextFrame(), NextFrame(), NextFrame(), Pick(1));
+
+        bool Has(string key) => c.Spells.Contains(Content.SpellByKey(key)!.Id);
+        var missing = heldRows.Where(v => !Has(v[to])).Select(v => $"{v[from]}->{v[to]}").ToList();
+        var back = forgotten.Select(f => RowOf(f.Key)?[to] ?? f.Key).Where(Has).ToList();
+        var lostNine = nine.Where(n => !c.Spells.Contains(n.Id)).Select(n => n.Key).ToList();
+        string line = $"{from} to {to}: alignment now {c.Alignment}, {c.Spells.Count} slots; held, new version missing " +
+                      $"[{string.Join(", ", missing)}]; forgotten back [{string.Join(", ", back)}]; Druid spells lost " +
+                      $"[{string.Join(", ", lostNine)}]; {heldRows.Count} named spells held";
+        _out.WriteLine(line);
+        Assert.True(c.Alignment == to && c.Spells.Count == Content.SpellBookCap && missing.Count == 0 && back.Count == 0
+                    && lostNine.Count == 0, line);
+    }
+
+    /// <summary>Every aligned row of the content is in the declared pairing that decides "held" at a devote or a renounce
+    /// past the cap (<c>Content.AlignmentPairOf</c>; #417's re-check, F6), under a key that is a loaded unaligned row. A
+    /// row the pairing does not name is held only by its own id, so the cut can take its new version from a member who
+    /// held it; the message names each such row, for the pairing's table. Red with Siege's row taken out of the
+    /// table.</summary>
+    [Fact]
+    public void EveryAlignedRowIsInTheDeclaredPairing()
+    {
+        var problems = new List<string>();
+        foreach (var sp in Content.Spells.Where(sp => sp.Alignment is >= 1 and <= 3))
+        {
+            string pair = Content.AlignmentPairKey(sp.Key);
+            if (pair == sp.Key) problems.Add($"{sp.Key} (alignment {sp.Alignment}): not in the pairing");
+            else if (Content.SpellByKey(pair) is not { Alignment: 0 })
+                problems.Add($"{sp.Key}: paired under {pair}, which is not a loaded unaligned row");
+        }
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
 
@@ -603,13 +855,28 @@ public sealed class SubpathTeacherTests
     {
         var ctx = new NpcContext(s, TeacherMob(def), def);
         var entry = NpcScripts.For(def).SelectMany(a => a.Entries(ctx)).Single(e => e.label == label);
+        Run(s, () => entry.run(ctx), steps);
+    }
+
+    /// <summary>Say <paramref name="speech"/> to <paramref name="def"/>, which answers it with its
+    /// <typeparamref name="T"/> (the handler its composition gives it), then take <paramref name="steps"/> as
+    /// <see cref="Converse"/> does.</summary>
+    private void SayTo<T>(Session s, NpcDef def, string speech, params object[] steps) where T : INpcSayHandler
+    {
+        var ctx = new NpcContext(s, TeacherMob(def), def);
+        var handler = NpcScripts.For(def).OfType<T>().Single();
+        Run(s, () => handler.OnSay(ctx, speech), steps);
+    }
+
+    private static void Run(Session s, Func<Task> start, object[] steps)
+    {
         Task? flow = null;
         Exception? fault = null;
         var t = new Thread(() => fault = Record.Exception(() =>
         {
             int k = 0;
             for (; k < steps.Length && steps[k] is string first; k++) s.Receive(ChatFrame(first));
-            s.WithState(() => { flow = entry.run(ctx); });
+            s.WithState(() => { flow = start(); });
             for (; k < steps.Length && !flow!.IsCompleted; k++)
                 s.Receive(steps[k] is string command ? ChatFrame(command) : (byte[])steps[k]);
             for (int i = 0; i < 20 && !flow!.IsCompleted; i++) s.Receive(NextFrame());

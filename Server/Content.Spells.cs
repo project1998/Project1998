@@ -731,7 +731,8 @@ public static partial class Content
     /// forgotten until bought again, and a rebuild into another path (<c>@class</c>) drops them, since their path
     /// no longer matches. RTK has no rebuild; its alignment swap exchanges a fixed list of base spells and leaves
     /// these alone (<c>Scripts/swapAlignment.lua</c>). See <see cref="KeepHeldSubpathSpells"/> for where they
-    /// sit.</para></summary>
+    /// sit, and for what gives way when the set would pass the book's 52 slots: never one of them, and never an entry
+    /// the book already held.</para></summary>
     public static List<SpellDef> RespecSpellSet(int pathId, int maxLevel, int alignment, int mark,
                                                bool dogFlag = false, int sageRung = 0,
                                                IEnumerable<SpellDef>? held = null)
@@ -796,20 +797,231 @@ public static partial class Content
             pathId, held);
     }
 
+    // ---- alignment PAIRS (which rows are one spell's four alignment versions) -----------------------------------
+    // A devote or a renounce rebuilds the book at the new alignment (Session.SwapAlignment, SyncSpellbook), so a spell
+    // the book held comes back as the new alignment's version, under another id, and KeepHeldSubpathSpells has to know
+    // which rows those are. The content's alignment families (BuildAlignFamilies) can't say: they link rows by id
+    // adjacency, which files the Call of the Wild Gorilla with the three Companions, and each other form with none of
+    // its own versions (#417's re-check, F6). So the pairing is declared, the way RTK declares it.
+    //
+    // RtkAlignmentSwap is RTK's own (rtklua/Accepted/Scripts/swapAlignment.lua, Player.swapAlignment): four lists of
+    // 114 stems, unaligned (lines 38-151), Kwi-Sin (155-268), Ming-Ken (272-385) and Ohaeng (389-502), and a swap
+    // turns entry i of the old alignment's list into entry i of the new one's, each with the class suffix (531-537).
+    // Row i here is lines 37+i, 154+i, 271+i and 388+i, as RTK writes them but for one word: Ming-Ken's row 108 reads
+    // "kwisin_companion" (line 379), Kwi-Sin's word again (line 262). RTK's own Call of the Wild (Caterpillar) script
+    // names that spell's four versions cotw_caterpillar_poet, kwisin_companion_poet, mingken_companion_poet and
+    // ohaeng_companion_poet (rtklua/Accepted/Spells/poet/cotw_caterpillar.lua:29, 64, 99, 134), and Spells.csv has
+    // mingken_companion_poet, so row 108 has it.
+    private static readonly string[][] RtkAlignmentSwap =
+    {
+        new[] { "taunt", "anger", "tease", "mock" },                                                            // 1
+        new[] { "wolfs_fury", "souls_rage", "spirit_of_the_forest", "augmentation" },                           // 2
+        new[] { "bless", "sanctification", "tribal_gathering", "strength_of_purpose" },                         // 3
+        new[] { "fleshspeak", "spiritsong", "helping_hand", "heal_others" },                                    // 4
+        new[] { "backstab", "back_battle", "back_attack", "back_damage" },                                      // 5
+        new[] { "flank", "flank_battle", "flank_attack", "flank_damage" },                                      // 6
+        new[] { "tigers_fury", "filling_the_soul", "spirit_of_the_wild", "ohaengs_grace" },                     // 7
+        new[] { "enchant", "spiritual_aid", "oneness", "strengthen_weapon" },                                   // 8
+        new[] { "relief", "renew_essence", "lifesong", "sweet_waters" },                                        // 9
+        new[] { "potence", "spirit_arm", "touch_of_the_bear", "sharpen" },                                      // 10
+        new[] { "watchful_eye", "spirits_whisper", "creatures_guidance", "spot_unbalance" },                    // 11
+        new[] { "dragons_fury", "strength_of_ancestors", "spirit_of_the_dragon", "ohaengs_anger" },             // 12
+        new[] { "infuse", "tincture_of_the_unknown", "tigers_claw", "whetstone" },                              // 13
+        new[] { "ingress", "hand_of_darkness", "dragons_claw", "razors_edge" },                                 // 14
+        new[] { "berserk", "no_fear", "tigers_pounce", "winds_blast" },                                         // 15
+        new[] { "vigor", "touch_of_health", "balm", "restoration" },                                            // 16
+        new[] { "whirlwind", "deaths_angel", "natures_own", "bladedance" },                                     // 17
+        new[] { "hoche", "immunity", "forest_blessing", "magics_shield" },                                      // 18
+        new[] { "salvation", "redemption", "ointment_of_light", "return_of_life" },                             // 19
+        new[] { "assault", "deaths_challenge", "cold_snap", "volley" },                                         // 20
+        new[] { "hunangs_relief", "from_the_brink", "natures_slave", "lifes_essence" },                         // 21
+        new[] { "feral", "kwisin_cloak", "mingken_cloak", "ohaeng_cloak" },                                     // 22
+        new[] { "might", "spirit_strength", "inner_blessing", "temper" },                                       // 23
+        new[] { "judge", "spiritual_advisor", "natural_talent", "appraise" },                                   // 24
+        new[] { "singe", "embrace_of_the_void", "lightning", "natures_storm" },                                 // 25
+        new[] { "mend_wounds", "spiritual_cure", "natures_kiss", "cooling_touch" },                             // 26
+        new[] { "ignite", "spirit_strike", "wrath_of_nature", "thunderclap" },                                  // 27
+        new[] { "shadow_figure", "spirit_warrior", "natural_defense", "ohaengs_armor" },                        // 28
+        new[] { "rodent", "kwisin_disguise", "mingken_disguise", "ohaeng_disguise" },                           // 29
+        new[] { "spy", "spiritual_guide", "natures_handiwork", "judgement_day" },                               // 30
+        new[] { "gangrel", "kwisin_mask", "mingken_mask", "ohaeng_mask" },                                      // 31
+        new[] { "invisible", "spirits_form", "lifes_cloak", "glass_form" },                                     // 32
+        new[] { "ambush", "displacement", "waylay", "reflect" },                                                // 33
+        new[] { "beast", "kwisin_chameleon", "mingken_chameleon", "ohaeng_chameleon" },                         // 34
+        new[] { "amnesia", "forgetfulness", "free_spirit", "mislead" },                                         // 35
+        new[] { "recover", "spirits_embrace", "infuse_energy", "lifes_river" },                                 // 36
+        new[] { "desperate_attack", "the_voids_measure", "beastly_frenzy", "tilting_the_balance" },             // 37
+        new[] { "filch", "spirits_hand", "quick_fingers", "light_touch" },                                      // 38
+        new[] { "drain", "drink_of_souls", "parasite", "absorb" },                                              // 39
+        new[] { "seal_wounds", "spirit_caress", "heal_injury", "bandage" },                                     // 40
+        new[] { "lethal_strike", "afterlifes_embrace", "mingkens_judgement", "calculating_blow" },              // 41
+        new[] { "maros_remedy", "kwisin_maros_remedy", "mingken_maros_remedy", "ohaeng_maros_remedy" },         // 42
+        new[] { "masos_remedy", "kwisin_masos_remedy", "mingken_masos_remedy", "ohaeng_masos_remedy" },         // 43
+        new[] { "race", "spiritual_jump", "leap_of_faith", "transport" },                                       // 44
+        new[] { "refresh", "souls_awakening", "healing_waters", "fire_dance" },                                 // 45
+        new[] { "bladestorm", "swords_dance", "tigers_ambush", "cutting_edge" },                                // 46
+        new[] { "chance", "randomness", "natures_choice", "trial_by_fire" },                                    // 47
+        new[] { "daggers_remedy", "kwisin_daggers_remedy", "mingken_daggers_remedy", "ohaeng_daggers_remedy" }, // 48
+        new[] { "swift_recovery", "renew_energy", "loving_dew", "invigorate" },                                 // 49
+        new[] { "harden_armor", "thicken_skin", "shield_of_life", "elemental_armor" },                          // 50
+        new[] { "lay_hands", "spirits_smile", "lifes_water", "quicken" },                                       // 51
+        new[] { "erupt", "soulstorm", "avalanche", "deluge" },                                                  // 52
+        new[] { "valor", "strengthen", "bless_muscles", "power_burst" },                                        // 53
+        new[] { "ion", "soul_strike", "tree_dart", "sunstroke" },                                               // 54
+        new[] { "purge", "cure_illness", "restore_health", "remove_poison" },                                   // 55
+        new[] { "ion_charge", "crescendo", "flight_of_arrows", "blazing_sands" },                               // 56
+        new[] { "recover", "spirits_embrace", "infuse_energy", "lifes_river" },                                 // 57
+        new[] { "cure_paralysis", "release_binds", "return_movement", "free_movement" },                        // 58
+        new[] { "sanctuary", "protect_soul", "guard_life", "magic_shield" },                                    // 59
+        new[] { "invoke", "spirits_power", "life_force", "gather_magic" },                                      // 60
+        new[] { "heal", "ancestors_touch", "life_flow", "infuse_lifeforce" },                                   // 61
+        new[] { "impact", "soul_spike", "treefall", "shatter" },                                                // 62
+        new[] { "explode", "soul_chasm", "winters_vortex", "volcano" },                                         // 63
+        new[] { "remove_curse", "release_curse", "undo_evil", "restore_armor" },                                // 64
+        new[] { "call_lightning", "death_scream", "natures_wounding", "rain_of_fire" },                         // 65
+        new[] { "vex", "deaths_face", "unnatural_selection", "flaw" },                                          // 66
+        new[] { "venom", "spirits_leech", "snake_bite", "corruption" },                                         // 67
+        new[] { "blind", "dark_veil", "winters_shadow", "ice_glare" },                                          // 68
+        new[] { "paralyze", "spirit_leash", "cold_binds", "lockup" },                                           // 69
+        new[] { "electrocute", "eater_of_the_dead", "forests_discord", "shatter_storm" },                       // 70
+        new[] { "confuse", "curse_of_the_void", "despise_friend", "chaos_rain" },                               // 71
+        new[] { "sleep", "sweet_musings", "essence_of_poppies", "stillness" },                                  // 72
+        new[] { "stormstrike", "river_of_blood", "natural_disaster", "winds_of_disaster" },                     // 73
+        new[] { "doze", "voids_touch", "still_ethers", "still_waters" },                                        // 74
+        new[] { "tempest", "dance_macabre", "wilding", "chain_lightning" },                                     // 75
+        new[] { "rejuvenate", "still_embrace", "infuse_life", "healing_rain" },                                 // 76
+        new[] { "hellfire", "consume_soul", "flesh_eaters", "hurricane" },                                      // 77
+        new[] { "solace", "festival_of_souls", "natures_bounty", "ohaengs_blessing" },                          // 78
+        new[] { "bekyuns_heal", "death_denied", "one_with_life", "balanced_touch" },                            // 79
+        new[] { "inferno", "deaths_door", "natures_denial", "steel_storm" },                                    // 80
+        new[] { "vital_spark", "spirits_kiss", "spark_of_health", "water_of_nature" },                          // 81
+        new[] { "anoint", "brothers_of_spirit", "gathering_of_power", "natures_family" },                       // 82
+        new[] { "remove_veil", "clear_darkness", "restore_sight", "purge_darkness" },                           // 83
+        new[] { "endear", "possess_soul", "charm_life", "align_follower" },                                     // 84
+        new[] { "revitalize", "ancestors_embrace", "lifeforce", "lifespring" },                                 // 85
+        new[] { "inspiration", "draw_energy", "harness_power", "combine_focus" },                               // 86
+        new[] { "remedy", "brethren_of_spirits", "gathering_of_the_flock", "gathering_of_majesty" },            // 87
+        new[] { "atone", "restore_will", "raise_guard", "align_armor" },                                        // 88
+        new[] { "fortify", "ancestors_kiss", "fertile_soil", "waters_of_purity" },                              // 89
+        new[] { "second_sight", "hear_spirits", "improve_sight", "show_hidden" },                               // 90
+        new[] { "retribution", "spirit_puppet", "palm_of_life", "tornado" },                                    // 91
+        new[] { "barrier", "spirit_barrier", "life_barrier", "balance_barrier" },                               // 92
+        new[] { "inspire", "share_energy", "bestow_power", "release_focus" },                                   // 93
+        new[] { "scourge", "damage_will", "drop_guard", "unalign_armor" },                                      // 94
+        new[] { "earthquake", "tossing_the_bones", "natures_fury", "groundstrike" },                            // 95
+        new[] { "blockade_human", "block_entry", "distance_self", "protect_sides" },                            // 96
+        new[] { "heavens_kiss", "clan_of_souls", "healing_hand", "earths_embrace" },                            // 97
+        new[] { "harden_body", "deaths_guard", "lifes_protection", "body_of_alignment" },                       // 98
+        new[] { "dispell", "remove_magic", "return_natural", "restore_balance" },                               // 99
+        new[] { "flare", "dance_of_death", "breaking_of_the_world", "storm_crow" },                             // 100
+        new[] { "water_of_life", "breath_of_power", "healing_breath", "breath_of_life" },                       // 101
+        new[] { "resurrect", "return_spirit", "mingken_blessing", "death_undone" },                             // 102
+        new[] { "stream_of_life", "purity_of_spirit", "natures_abundance", "forge_of_life" },                   // 103
+        new[] { "bolster", "dark_armor", "life_armor", "armor_of_elements" },                                   // 104
+        new[] { "dishearten", "dark_fear", "break_will", "harshen_attack" },                                    // 105
+        new[] { "essence_of_life", "essence_of_spirit", "lifes_embrace", "earths_cradle" },                     // 106
+        new[] { "spark", "glimpse_of_the_void", "bolt", "natures_ire" },                                        // 107
+        new[] { "cotw_caterpillar", "kwisin_companion", "mingken_companion", "ohaeng_companion" },              // 108
+        new[] { "cotw_fluffy_dog", "kwisin_assistant", "mingken_assistant", "ohaeng_assistant" },               // 109
+        new[] { "cotw_panda_bear", "kwisin_protector", "mingken_protector", "ohaeng_protector" },               // 110
+        new[] { "cotw_wild_monkey", "kwisin_fighter", "mingken_fighter", "ohaeng_fighter" },                    // 111
+        new[] { "cotw_gorilla", "kwisin_warrior", "mingken_warrior", "ohaeng_warrior" },                        // 112
+        new[] { "cotw_wind_dancer", "kwisin_champion", "mingken_champion", "ohaeng_champion" },                 // 113
+        new[] { "cotw_wind_warrior", "kwisin_avatar", "mingken_avatar", "ohaeng_avatar" },                      // 114
+    };
+
+    /// <summary>The content's aligned rows that <see cref="RtkAlignmentSwap"/> does not name, each with its unaligned
+    /// row, in the order unaligned, Kwi-Sin, Ming-Ken, Ohaeng. Each is the pairing the rows were added under: Siege's
+    /// three are the names the live Nexus Atlas warrior page gives Siege (<c>game-data/Sources.csv</c>,
+    /// <c>atlas-warrior-spells</c>). The split traps are RTK's row 46 (bladestorm, swords_dance, tigers_ambush,
+    /// cutting_edge) under the keys RTK's trap script gives them (<c>rtklua/Accepted/Spells/rogue/bladestorm_trap.lua</c>:1,
+    /// 42, 83, 124), which the list's stem and suffix do not spell. The other ten are the Sam san families the project
+    /// owner had their aligned rows added to (2026-10-24, decision sheet item 7), each from its family's block on the
+    /// live class page (<c>atlas-warrior-spells</c>, <c>atlas-rogue-spells</c>, <c>atlas-mage-spells</c>,
+    /// <c>atlas-poet-spells</c>).</summary>
+    private static readonly string[][] AlignedRowsTheSwapListsDoNotName =
+    {
+        new[] { "siege_warrior", "souls_freedom_warrior", "lifes_end_warrior", "winter_chill_warrior" },
+        new[] { "set_bladestorm_trap", "set_swords_dance_trap", "set_tigers_ambush_trap", "set_cutting_edge_trap" },
+        new[] { "healths_return_warrior", "mending_of_the_soul_warrior", "spirits_salvation_warrior", "gift_of_life_warrior" },
+        new[] { "mend_equipment_warrior", "restore_equipment_warrior", "luster_return_warrior", "reforge_warrior" },
+        new[] { "explorers_remedy_rogue", "kwisin_explorers_remedy_rogue", "mingken_explorers_remedy_rogue",
+                "ohaeng_explorers_remedy_rogue" },
+        new[] { "focused_blow_rogue", "burial_dance_rogue", "flowing_energy_rogue", "freeform_rogue" },
+        new[] { "power_stream_rogue", "phantoms_kiss_rogue", "life_herbs_rogue", "meditation_rogue" },
+        new[] { "dooms_fire_mage", "deaths_awakening_mage", "soul_rip_mage", "final_blow_mage" },
+        new[] { "energy_flow_mage", "spirit_heal_mage", "natures_milk_mage", "peaceful_bliss_mage" },
+        new[] { "charge_of_life_poet", "vital_charge_poet", "blessing_of_life_poet", "sacred_soil_poet" },
+        new[] { "ensure_poet", "spirit_shield_poet", "soul_guard_poet", "rock_blessing_poet" },
+        new[] { "cotw_wind_master_poet", "kwisin_master_poet", "mingken_master_poet", "ohaeng_master_poet" },
+    };
+
+    private static readonly string[] AlignmentSwapSuffixes = { "_warrior", "_rogue", "_mage", "_poet" };   // RTK's `classes`
+
+    /// <summary>Spell key → the key of the unaligned row of its four alignment versions, for every key the two tables
+    /// above name (each RTK stem with each class suffix). Built from the tables alone, so it is the same for every
+    /// load of the content.</summary>
+    private static readonly Dictionary<string, string> AlignmentPairOf = BuildAlignmentPairs();
+
+    private static Dictionary<string, string> BuildAlignmentPairs()
+    {
+        var pairOf = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var suffix in AlignmentSwapSuffixes)
+            foreach (var row in RtkAlignmentSwap)
+                foreach (var stem in row) pairOf.TryAdd(stem + suffix, row[0] + suffix);
+        foreach (var row in AlignedRowsTheSwapListsDoNotName)
+            foreach (var key in row) pairOf.TryAdd(key, row[0]);
+        return pairOf;
+    }
+
+    /// <summary>The key that names <paramref name="key"/>'s alignment versions together (<see cref="AlignmentPairOf"/>),
+    /// or the key itself for a spell the pairing does not name.</summary>
+    internal static string AlignmentPairKey(string key) => AlignmentPairOf.GetValueOrDefault(key, key);
+
     /// <summary><see cref="RespecSpellSet"/>'s last step: the <paramref name="held"/> spells of
     /// <paramref name="pathId"/>'s own PC subpath, appended after the rebuilt set in the order the book held them,
-    /// each once. Nothing for any other path, or with no book given.
-    /// <para>Last is a position, not a priority. <c>Session.SyncSpellbook</c> keeps the first
-    /// <see cref="SpellBookCap"/> entries, so a set past the cap would lose these first; the most a member can hold
-    /// today stays inside it (<c>Tests/SubpathTeacherTests.cs</c> measures it). Which entries should give way
-    /// once a later spell slice can pass the cap is not decided here.</para></summary>
+    /// each once, and the set cut to <see cref="SpellBookCap"/>. Nothing for any other path, or with no book given.
+    /// <para><b>Past the cap, what the book did not hold gives way</b> (the project owner, 2026-10-31, "Subpath
+    /// spells stay"). A rank-2 or rank-3 Druid with all nine Druid spells is owed 53 or 57 entries, and the book keeps
+    /// 52 (<c>Session.SyncSpellbook</c> keeps the first <see cref="SpellBookCap"/>). So every held subpath spell stays,
+    /// and so does every entry of the rebuilt set the book already held; the entries the book did not hold (base spells
+    /// the member had forgotten, which the rebuild hands back) fill what is left, in the set's order, and the last of
+    /// them are the ones left out. The order of what stays is the set's order, so a rebuild that fits is unchanged. An
+    /// entry counts as held when the book held it in any alignment's version: a devote or a renounce rebuilds at the new
+    /// alignment, and a held spell comes back as that alignment's version (#417's re-check, F4; which rows are one spell's
+    /// four versions is the declared pairing, <see cref="AlignmentPairOf"/>, RTK's swap lists, F6). And an entry on a ladder counts as held when the book held
+    /// any rung of that ladder: the set keeps only the top rung, so a held lower rung stays as the top (#417's review,
+    /// F3). RTK has no rebuild to follow: its book is 52 too (<c>rtk/src/common/mmo.h</c>, <c>MAX_SPELLS</c>) and its
+    /// alignment swap leaves subpath spells alone.</para></summary>
     private static List<SpellDef> KeepHeldSubpathSpells(List<SpellDef> rebuilt, int pathId, IEnumerable<SpellDef>? held)
     {
         if (held is null || !IsPcSubpath(pathId)) return rebuilt;
+        var book = held.ToList();
         var ids = rebuilt.Select(s => s.Id).ToHashSet();
-        foreach (var s in held)
+        foreach (var s in book)
             if (s.PathId == pathId && ids.Add(s.Id)) rebuilt.Add(s);
-        return rebuilt;
+        int over = rebuilt.Count - SpellBookCap;
+        if (over <= 0) return rebuilt;
+        // Held means held as a spell, in any alignment's version of it, or as its ladder. A devote or a renounce rebuilds
+        // at the new alignment, so a spell the book held comes back as that alignment's version, under another id (#417's
+        // re-check, F4): the declared pairing (AlignmentPairOf, RTK's swap lists and the rows they do not name) says which
+        // rows are one spell (the re-check's F6: not the content's adjacency families). And the rebuilt set keeps only a
+        // ladder's top rung, so a book that held a lower rung holds that ladder's rung in the set, the top, and it stays
+        // as the rung did (#417's review, F3).
+        var inBook = book.Select(s => s.Id).ToHashSet();
+        string Family(SpellDef s) => AlignmentPairKey(s.Key);
+        var heldFamilies = book.Select(Family).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        LadderOf.TryGetValue(PathBaseOf(pathId), out var ladders);
+        var heldLadders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (ladders is not null)
+            foreach (var s in book)
+                if (ladders.TryGetValue(s.Key, out var rung)) heldLadders.Add(rung.Ladder);
+        bool Held(SpellDef s) => inBook.Contains(s.Id) || heldFamilies.Contains(Family(s))
+                                 || (ladders is not null && ladders.TryGetValue(s.Key, out var r) && heldLadders.Contains(r.Ladder));
+        var leaveOut = new HashSet<int>();                          // indexes into rebuilt, the last unheld first
+        for (int i = rebuilt.Count - 1; i >= 0 && leaveOut.Count < over; i--)
+            if (!Held(rebuilt[i])) leaveOut.Add(i);
+        return rebuilt.Where((_, i) => !leaveOut.Contains(i)).ToList();
     }
 
     public static SpellDef? SpellById(int id) => SpellByIdIndex.TryGetValue(id, out var v) ? v : null;

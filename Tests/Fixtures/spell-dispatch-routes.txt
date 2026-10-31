@@ -47,6 +47,11 @@
 # rows); barbarian_rage to verb=stance_rage (its SpellMods.csv rage row and spell_effects.csv row); wilderness_weapon and
 # nomadic_blade to verb=stance_enchant (their SpellMods.csv enchant rows). survival_challenge stays on verb=generic. No
 # other line changed.
+# The Druid spells slice (2026-10-31) then moved six PC-subpath spells off verb=generic (the project owner's P5:
+# RTK's scripts), each bound by a SpellParams.csv row: control_flames to verb=flame_window row, druids_rodent to
+# verb=rodent_morph row, steed to verb=spawn_steed row, sea_breeze to verb=breeze_heal row, natures_bloom to
+# verb=bloom_window row and energy_bloom to verb=ranged_strike row. efflorescence stays on verb=generic. No other
+# line changed.
 # Re-record with P1998_SPELL_ROUTES_OUT (see the fact's doc). The header a re-record writes is the
 # fact's own, which names only spirit_blade, so carry this history over by hand.
 absorb_rogue	2084	verb=drain row
@@ -160,7 +165,7 @@ cold_snap_warrior	1087	verb=arch_damage
 combine_focus_poet	4076	verb=mana_steal
 confuse_mage	3124	verb=confuse row
 consume_soul_mage	3149	verb=arch_damage
-control_flames	31401	verb=generic
+control_flames	31401	verb=flame_window row
 cooling_touch_mage	3039	verb=arch_heal
 cooling_touch_rogue	2024	verb=arch_heal
 corrupt	50024	verb=curse row
@@ -236,7 +241,7 @@ drain_rogue	2081	verb=drain row
 draw_energy_poet	4074	verb=mana_steal
 drink_of_souls_rogue	2082	verb=drain row
 drop_guard_poet	4107	verb=curse row
-druids_rodent	31402	verb=generic
+druids_rodent	31402	verb=rodent_morph row
 duel_request	3	verb=generic
 earth_strike	31407	verb=ranged_strike row
 earthquake_poet	4109	verb=target_area_zap
@@ -259,7 +264,7 @@ employ_troop	30310	verb=generic
 enchant_warrior	1034	verb=stance_enchant
 endear	50034	verb=endear row
 endear_poet	4061	verb=endear row
-energy_bloom	31408	verb=generic
+energy_bloom	31408	verb=ranged_strike row
 energy_flow_mage	3169	verb=arch_heal
 engrave	30602	verb=generic
 enhanced_drink	30308	verb=generic
@@ -535,7 +540,7 @@ natural_defense_rogue	2031	verb=arch_buff
 natural_disaster_mage	3134	verb=arch_damage
 natural_talent_rogue	2015	verb=divine row
 natures_abundance_poet	4145	verb=arch_heal
-natures_bloom	31406	verb=generic
+natures_bloom	31406	verb=bloom_window row
 natures_bounty_mage	3155	verb=arch_heal
 natures_choice_rogue	2114	verb=misc
 natures_denial_mage	3164	verb=target_area_zap
@@ -704,7 +709,7 @@ sanctuary_poet	4053	verb=arch_targetbuff
 scourge	50011	verb=generic
 scourge_poet	4105	verb=curse row
 scouting_trip	30707	verb=generic
-sea_breeze	31405	verb=generic
+sea_breeze	31405	verb=breeze_heal row
 seal_fate	31006	verb=generic
 seal_wounds_rogue	2085	verb=arch_heal
 second_life	31503	verb=generic
@@ -822,7 +827,7 @@ spy_kit	30804	verb=generic
 spy_rogue	2037	verb=divine row
 stagger	50033	verb=generic
 static_mage	3007	verb=arch_debuff
-steed	31403	verb=generic
+steed	31403	verb=spawn_steed row
 steel_storm_mage	3165	verb=target_area_zap
 still_embrace_mage	3145	verb=arch_heal
 still_ethers_mage	3138	verb=arch_debuff

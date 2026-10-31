@@ -911,4 +911,44 @@ public sealed class SpellContext
                               double beatAnim, double beatMs) =>
         _s.LuaCurseAround(_sp, category, stat, (int)System.Math.Round(amount), (int)durMs, blockedBy, line,
                           (int)beatAnim, (int)beatMs);
+
+    // ---- the Druid spells' primitives (RTK Spells/Subpaths/Druid/), the drop hook built for Geomancer's Exhume too ---
+    // As the Barbarian half: a heal on another player lands inside that player's own monitor (ReceiveHeal, WithState); a
+    // creature and a floor item are written through World's own methods. No new lock. See Session.Spells.cs, "the Druid
+    // spells".
+    /// <summary>A drop hook's context (<c>Session.RunDropHooks</c>): this spell, whose wait is running, is handed the item
+    /// its caster is dropping, <paramref name="dropped"/> (an Items.csv key), before it leaves the bag.</summary>
+    internal SpellContext(Session s, SpellDef sp, string dropped)
+        : this(s, sp, null, null)
+    {
+        this.dropped = dropped;
+    }
+    /// <summary>In a drop hook, the key of the item being dropped (RTK <c>player:getInventoryItem(player.invSlot).yname</c>);
+    /// "" in a cast.</summary>
+    public string dropped { get; } = "";
+    /// <summary>Take one of the item being dropped from the bag, as RTK's <c>player:removeItem(yname, 1, 1)</c> takes it:
+    /// from the first stack of it, in slot order, that is not full, else from the first; a stack that empties reads "You
+    /// dropped &lt;item&gt;.". False, taking nothing, when there is none to take or the caster is going away (a kick or an
+    /// exchange that came while the hook waited for the Lua gate); the hook then does nothing more. See
+    /// <c>Session.LuaTakeDropped</c>.</summary>
+    public bool takeDropped() => _s.LuaTakeDropped(dropped);
+    /// <summary>Control flames' flames: every creature (never an NPC) on each of the caster's four sides, north, east,
+    /// south, west, every one on each, takes <paramref name="amount"/>, netted against its armour, with this spell's
+    /// graphic over it; when any was struck the spell's sound plays at the caster (RTK <c>getTargetsAround(player,
+    /// BL_MOB)</c>). Returns how many were struck.</summary>
+    public double strikeAround(double amount) => _s.LuaStrikeAround(_sp, (int)System.Math.Round(amount));
+    /// <summary>Nature's bloom's flowers: one <paramref name="itemKey"/> on the caster's tile, then one more on each tile
+    /// within <paramref name="radius"/> on both axes, on a <paramref name="chance"/>% roll, where the tile carries no map
+    /// object, is passable and is no warp, a tile past the map's edge read as the edge tile (RTK's clamp). Returns how
+    /// many were put down. See <c>Session.LuaScatter</c>.</summary>
+    public double scatter(string itemKey, double radius, double chance) =>
+        _s.LuaScatter(_sp, itemKey, (int)radius, chance);
+    /// <summary>Sea breeze: every player and every creature (not an NPC) within <paramref name="range"/> tiles of the
+    /// caster on both axes, the caster too, gets this spell's graphic and <paramref name="amount"/> vita (a ghost none), a
+    /// player reading <paramref name="line"/> first; the spell's sound plays at the caster. Returns how many.</summary>
+    public double healRange(double amount, double range, string line) =>
+        _s.LuaHealRange(_sp, (int)System.Math.Round(amount), (int)range, line);
+    /// <summary>End the caster's creature form now, as when it runs out (RTK <c>removeDuras(morphs)</c>). False with
+    /// none.</summary>
+    public bool endMorph() => _s.LuaEndMorph();
 }

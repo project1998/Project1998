@@ -131,7 +131,23 @@ public sealed class LuaVerbHost
         _script = prepared.Script;
         _verbs = prepared.Verbs;
         _rowCache.Clear();   // cached Tables belong to the OLD Script — only safe to drop once it is replaced
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pair in prepared.Verbs.Pairs)
+            if (pair.Key.Type == DataType.String && pair.Value.Type == DataType.Function) names.Add(pair.Key.String);
+        _verbNames = names;
     }
+
+    /// <summary>The names of the loaded verbs, published whole at each commit and never changed in place, so
+    /// <see cref="HasVerbUngated"/> reads one load's set or the next's without the Lua gate.</summary>
+    private volatile IReadOnlySet<string> _verbNames = new HashSet<string>();
+
+    /// <summary>Is <paramref name="verb"/> a function in the loaded verb table, asked WITHOUT the Lua gate: the set the
+    /// last commit published. For a caller that must not wait at the gate just to learn there is nothing to run, since a
+    /// handler that waits there lets its session's monitor go (<c>Session.EnterScriptGate</c>'s slow path): the item-drop
+    /// handler asks it on every drop (<c>Session.RunDropHooks</c>, #417's review, F1). A reload racing the read may answer
+    /// for either load; <see cref="Invoke"/>, under the gate, has the last word (a verb gone by then is
+    /// <see cref="VerbResult.Missing"/>).</summary>
+    public bool HasVerbUngated(string verb) => _verbNames.Contains(verb);
 
     /// <summary>Is <paramref name="verb"/> a function in the loaded verb table?</summary>
     public bool HasVerb(string verb)

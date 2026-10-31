@@ -1563,8 +1563,8 @@ end
 --     and its Will over the caster's, a player on a PvP map by their Will over the caster's (RTK adds a player's
 --     protection too, a stat players here do not have), never the caster. Hailstorm shares their verb but carries
 --     SplCanFail 0, as RTK's table does, so it is never deflected. Lightning storm's sweep rolls none.
--- Control flames (Druid) is not here: its acorn-drop hook needs C# in the item-drop path (Session.HandleDropItem),
--- so it stays on `generic` until that hook exists.
+-- Control flames (Druid) is not here: its acorn-drop hook is the Druid region's (flame_window, at the end of this
+-- file), on the drop hook in the item-drop path (Session.RunDropHooks).
 -- =========================================================================================================
 
 -- The reach RTK's Earth strike, Nature's smite and Lightning storm test with distanceSquare(player, target, 10):
@@ -2350,5 +2350,137 @@ end
 function verbs.heal_run_tick(ctx, row)
   local byMark = SONG_BY_MARK[ctx.mark] or {}
   ctx:healRunVictim(byMark.heal or row.amount or 0)
+  return true
+end
+
+-- =========================================================================================================
+-- DRUID (PC subpath; RTK rtklua/Accepted/Spells/Subpaths/Druid/). The project owner, 2026-10-26 (P5) and again on
+-- 2026-10-30: each spell as its RTK script, its smaller calls as RTK's. So Sea breeze heals creatures too, Energy bloom
+-- keeps its rank mark, and Steed's stag is ridden as RTK's onMount rides one (Session.TryRideHorse). The verbs here are
+-- Control flames and Nature's bloom (a cast that opens a window, and a drop hook while it runs), Druid's rodent, Steed
+-- and Sea breeze. Lightning storm, Earth strike and Nature's smite are storm_strike and ranged_strike above (#390), and
+-- Energy bloom binds ranged_strike too: its script is Earth strike's body under its own name. Efflorescence has no RTK
+-- script and stays as it was. Each verb is bound by its SpellParams.csv row, which carries its numbers, and is the shape
+-- of its script, in that script's order. The graphic and sound are the spell's spell_effects.csv row. RTK is weight 0
+-- for balance; these numbers are its scripts' by those decisions.
+--
+-- THE DROP HOOK (RTK clif_parsedropitem, which runs the on_drop_while_aether of every spell whose aether still runs
+-- before the item leaves the bag). While a spell's own wait runs, an item its caster drops is first handed to the verb
+-- named after the spell row's verb with "_drop" on the end, with ctx.dropped the item's key. Returning true takes the
+-- drop over (RTK's fakeDrop = 1): nothing lands but what the verb puts down. Returning false lets the item drop as it
+-- always does. See Session.RunDropHooks.
+--
+-- Where the port parts from the scripts, on purpose, as the subpath verbs above part:
+--   * Each wait is checked first, with this file's own line, and armed under the spell's own key (subpath_waiting).
+--     RTK waives Steed's wait for a GM; no verb here waives anything for staff.
+--   * The cast pose is the engine's, on a cast that lands, and so is the central "You cast X." line, said where the
+--     scripts say nothing (Control flames, Druid's rodent, Steed, Nature's bloom).
+--   * A wait is the session's, as every wait here is, so a relog ends it and the drop window with it (RTK keeps an
+--     aether across a relog).
+-- =========================================================================================================
+
+-- Control flames and Nature's bloom open their window the same way (RTK Subpaths/Druid/control_flames.lua and
+-- natures_bloom.lua, one cast): for `mana`, the spell's `duration` ms wait, inside which its caster's drops go to its
+-- hook. Short of mana, "Your will is too weak.", for free. Nothing else happens at the cast.
+local function open_window(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  local mana = row.mana or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return false end
+  ctx:debitMana(mana)
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  return true
+end
+
+-- Control flames (RTK Subpaths/Druid/control_flames.lua). Inside its window an acorn dropped is spent, one of it, and
+-- nothing lands. On a `chance`% roll (the script's math.random(1, 4) == 1), with `flat` mana there, every creature on
+-- the caster's four sides takes `amount`, netted against its armour, with the spell's graphic over it, and when any
+-- stood there the spell's sound plays, the `flat` mana goes and the script's own line is said (ctx:strikeAround). Short
+-- of `flat` on that roll, "Your will is too weak." and nothing struck. Any other item drops as always. With no acorn
+-- left to spend, or the caster going away (an exchange or a kick in the Lua gate's gap, Session.LuaTakeDropped),
+-- nothing happens and nothing lands. Row: mana 1000, duration 62000 (the window), amount 1200, chance 25, flat 800
+-- (the drop's own mana).
+local FLAME_ITEM = "acorn"                      -- control_flames.lua: item.yname == "acorn"
+local FLAME_LINE = "You cast Wall of flames."   -- its line when the flames rise
+
+function verbs.flame_window(ctx, row)
+  return open_window(ctx, row)
+end
+
+function verbs.flame_window_drop(ctx, row)
+  if ctx.dropped ~= FLAME_ITEM then return false end
+  if not ctx:takeDropped() then return true end              -- nothing to spend: nothing happens
+  if not ctx:roll(row.chance or 0) then return true end
+  local mana = row.flat or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return true end
+  if ctx:strikeAround(row.amount or 0) > 0 then
+    ctx:debitMana(mana)
+    ctx:say(FLAME_LINE)
+  end
+  return true
+end
+
+-- Druid's rodent (RTK Subpaths/Druid/druids_rodent.lua). In any creature's form already, the cast ends that form and
+-- does nothing else, silently and for free (the script's checkIfCast(morphs) and removeDuras(morphs)). Short of `mana`,
+-- "Your will is too weak.". Answered "rabbit" or "rat", the caster takes that look from the spell's Morphs.csv row
+-- (Rabbit 21, Rat 91) for its 155 s, with the spell's graphic and sound; any other answer does nothing, silently. Nothing
+-- is spent: the script checks its 30 and never takes it. Row: mana 30.
+function verbs.rodent_morph(ctx, row)
+  if ctx.morphed then ctx:endMorph(); return false end
+  if ctx.mp < (row.mana or 0) then ctx:say("Your will is too weak."); return false end
+  return ctx:morphTo(ctx.answer)
+end
+
+-- Steed (RTK Subpaths/Druid/steed.lua): Mount's spawn with the creature `category` names (Arawn's stag), on the faced
+-- tile when RTK's test finds it free, else on the caster's own tile; nobody owns it, and the ride key rides it as RTK's
+-- onMount rides a stag. Short of `mana`, "Your will is too weak.", for free; with it nothing is spent, as the script
+-- checks its 2000 and never takes it. The wait is armed before the spawn, as the script arms it. Row: mana 2000,
+-- category arawns_stag, duration 110000.
+function verbs.spawn_steed(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  if ctx.mp < (row.mana or 0) then ctx:say("Your will is too weak."); return false end
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  ctx:spawnFaced(row.category or "")
+  return true
+end
+
+-- Sea breeze (RTK Subpaths/Druid/sea_breeze.lua): for `mana`, with a `duration` ms wait, "You cast Sea breeze.", then
+-- every player and every creature within SUBPATH_REACH tiles of the caster on both axes, the caster among them and an
+-- NPC not, gets the spell's graphic and `amount` vita (a ghost the graphic and no vita), a player reading "<caster> cast
+-- Sea breeze on you." first (the script's line, the caster too), and the spell's sound plays at the caster
+-- (ctx:healRange). No PK test: a heal lands on anyone. Short of mana, "Your will is too weak.", for free. Row: mana
+-- 1500, amount 600, duration 75000.
+function verbs.breeze_heal(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  local mana = row.mana or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return false end
+  ctx:debitMana(mana)
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  ctx:say("You cast " .. ctx.spellName .. ".")
+  ctx:healRange(row.amount or 0, SUBPATH_REACH, ctx.name .. " cast " .. ctx.spellName .. " on you.")
+  ctx:narrated()                                                   -- the script's line comes first, then the sweep's
+  return true
+end
+
+-- Nature's bloom (RTK Subpaths/Druid/natures_bloom.lua). Inside its window a flower dropped, one of the script's
+-- sixteen, is spent, one of it, and nothing lands but what the spell scatters: one of that flower on the caster's tile,
+-- then over every tile within `amount` of them on both axes one more on a `chance`% roll, where the tile carries no map
+-- object, is passable and is no warp (ctx:scatter, with the script's clamp at the map's edge). No line, no graphic. Any
+-- other item drops as always. With no flower left to spend, or the caster going away (Session.LuaTakeDropped), nothing
+-- is scattered and nothing lands. Row: mana 200, duration 625000 (the window), amount 4, chance 50.
+local BLOOM_FLOWERS = {
+  daffodil = true, dawn_tulip = true, dusk_blossom = true, fallen_star = true, golden_sunset = true,
+  greater_tulip = true, heavens_bell = true, lemon_flower = true, mango_floret = true, midnights_reign = true,
+  old_poppy = true, orange_blossom = true, pink_mugunghwa = true, rose = true, sunflower = true, winedrop = true,
+}
+
+function verbs.bloom_window(ctx, row)
+  return open_window(ctx, row)
+end
+
+function verbs.bloom_window_drop(ctx, row)
+  local flower = ctx.dropped
+  if not BLOOM_FLOWERS[flower] then return false end
+  if not ctx:takeDropped() then return true end              -- nothing to spend: nothing scattered
+  ctx:scatter(flower, row.amount or 0, row.chance or 0)
   return true
 end

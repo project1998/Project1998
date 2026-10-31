@@ -243,6 +243,20 @@ public sealed partial class Session
         SendAction(_char.Id, ActionType.Drop, 20, 0);                                        // our drop crouch + sound
         _world.BroadcastSameArea(_char.Map, _char.X, _char.Y, p => p.ActionOver(_char.Id, ActionType.Drop, 20, 0), except: this);   // peers see it too
 
+        // A spell's drop hook (RTK clif_parsedropitem's on_drop_while_aether): while Control flames' or Nature's bloom's
+        // wait runs, an acorn or a flower dropped is the spell's to spend, and nothing lands but what it puts down. After
+        // the crouch, as RTK sends its drop pose before it runs the hooks. See Session.RunDropHooks.
+        //
+        // A hook runs in Lua, and waiting for a contended Lua gate lets this monitor go (Session.State.cs; the one
+        // exception Session.Handle documents). In that gap a second login's kick can write the row with the item still in
+        // it and close this session, or an exchange partner's confirm can move the stack out of the bag; landing the
+        // stack read above afterwards made one item two (#417's review, F1). So a session going away runs no hook, and
+        // after a hook that declines the drop is decided again under the retaken monitor: going away, nothing drops; else
+        // the slot must still hold that same stack of that item, and the count comes from it now.
+        if (GoingAway(this)) return;
+        if (RunDropHooks(def)) return;
+        if (GoingAway(this) || !ReferenceEquals(InvAt(slot), it) || it.ItemId != def.Id || it.Amount < 1) return;
+
         int count = dropAll ? it.Amount : 1;
         int remaining = it.Amount - count;
         if (remaining <= 0) { _char.Inventory.Remove(it); SendDelItem((byte)slot, DelReason.Dropped); }

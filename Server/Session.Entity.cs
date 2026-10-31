@@ -1066,6 +1066,7 @@ public sealed partial class Session
     {
         Log.Info($"   -> DIED: {_char.Name} on map {_char.Map} @ ({_char.X},{_char.Y})");
         _char.Mounted = false;                                            // a horse doesn't carry a ghost
+        _char.MountKey = "";                                              // ...nor a stag: the ridden creature goes with it
         ClearAllTimedEffects();                                           // RTK pc_diescript wipes every timer on death — buffs, curses, stances, and any morph/stealth disguise (must run before the ghost redraw so it draws from the real look, not the morph)
         RefreshAppearance();                                              // redraw self as a ghost + everyone watching — every one of its broadcast lambdas has US as the subject, so it takes peers' _viewLock and OUR snapshot, never a peer's monitor (which is why it stays here, where the peers need it)
         ApplyDeathPenalties();                                            // exp/coin/gear/pile — see below

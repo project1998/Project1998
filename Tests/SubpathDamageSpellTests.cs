@@ -13,7 +13,9 @@ namespace Tests;
 /// <c>RTK-Server/rtklua/Accepted/Spells/Subpaths/</c>. Before, none had a spell_effects archetype, so all of them fell to
 /// the <c>generic</c> verb: 5 mana for 1 + 4×Will + 3×Grace at a creature, and at a player off a PvP map the 5 mana, the
 /// pose, "You can't attack that target." and "You cast X." (<c>Tests/Fixtures/spell-dispatch-routes.txt</c> had all
-/// nine on <c>verb=generic</c>). Control flames, the ninth, needs an acorn-drop hook and stays there.
+/// nine on <c>verb=generic</c>). Control flames, the ninth, needed an acorn-drop hook; the Druid slice brought it
+/// (<c>Tests/DruidSpellTests.cs</c>), and with it Energy bloom, Earth strike's body under its own name, whose facts are
+/// Earth strike's here.
 ///
 /// <para>What each fact pins, against RTK's scripts:</para>
 /// <list type="bullet">
@@ -171,12 +173,13 @@ public sealed class SubpathDamageSpellTests
         }
     }
 
-    public static TheoryData<string> RangedKeys => new() { "earth_strike", "natures_smite" };
+    public static TheoryData<string> RangedKeys => new() { "earth_strike", "natures_smite", "energy_bloom" };
 
     /// <summary>Earth strike and Nature's smite strike a creature exactly 10 tiles off for RTK's amount and 600 mana,
     /// with no wait; at 11 tiles the cast does nothing, silently and for free, as the script's
     /// <c>distanceSquare(player, target, 10)</c> return does. Red on 821914e: the 11-tile cast struck for 570 and cost
-    /// 5 mana, and the 10-tile one too.</summary>
+    /// 5 mana, and the 10-tile one too. Energy bloom (the Druid slice) is the same body under its own name, and was the
+    /// same generic cast before it.</summary>
     [Theory]
     [MemberData(nameof(RangedKeys))]
     public void ARangedStrikeReachesTenTilesAndNoFurther(string key)
@@ -741,7 +744,7 @@ public sealed class SubpathDamageSpellTests
         get
         {
             var data = new TheoryData<string, bool> { { "assassinate", false } };
-            foreach (var key in new[] { "ki_strike", "hailstorm", "ice_bombardment", "earth_strike", "natures_smite" })
+            foreach (var key in new[] { "ki_strike", "hailstorm", "ice_bombardment", "earth_strike", "natures_smite", "energy_bloom" })
             {
                 data.Add(key, false);
                 data.Add(key, true);
@@ -842,6 +845,7 @@ public sealed class SubpathDamageSpellTests
     [InlineData("ice_bombardment")]
     [InlineData("earth_strike")]
     [InlineData("natures_smite")]
+    [InlineData("energy_bloom")]
     public void AnAimedSpellAtNothingCastsNothing(string key)
     {
         var sp = Spell(key);
@@ -873,19 +877,6 @@ public sealed class SubpathDamageSpellTests
     [InlineData("lightning_storm", 99)]
     public void EachLearnsAtTheLevelItsScriptAsks(string key, int level) =>
         Assert.Equal(level, Spell(key).Level);
-
-    /// <summary>Control flames, the ninth, is left exactly as it was (packet item 5): its acorn-drop hook would need new
-    /// C# in the item-drop path, so it has no SpellParams row or effect row of its own and keeps its row's level 0 until
-    /// it is ported (the route fixture keeps it on <c>verb=generic</c>). A guard, green on 821914e too.</summary>
-    [Fact]
-    public void ControlFlamesIsLeftAsItWas()
-    {
-        var sp = Spell("control_flames");
-        Assert.Equal(0, sp.Level);
-        Assert.Equal(0, sp.Mark);
-        Assert.False(Content.SpellParams.ContainsKey(sp.Key), "Control flames has a SpellParams row");
-        Assert.Null(Content.FxFor(sp));
-    }
 
     /// <summary>Nature's smite asks no subpath rank: RTK's script asks level 99 and nothing else
     /// (<c>natures_smite.lua:45-51</c>), and its twin Earth strike carries none either. Red on 821914e: mark 2.</summary>

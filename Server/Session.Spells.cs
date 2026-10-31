@@ -3764,13 +3764,22 @@ public sealed partial class Session
     private bool RtkTileFree(ushort map, ushort xs, ushort ys, int x, int y)
     {
         if (x < 0 || y < 0 || x >= xs - 1 || y >= ys - 1) return false;
-        var md = MapData.For(map, xs, ys);
-        if (md is not null && (md.Obj(x, y) != 0 || md.Pass(x, y) != 0)) return false;
-        if (Content.TryWarp(map, (ushort)x, (ushort)y, out _)) return false;
+        if (!RtkTileOpen(map, xs, ys, x, y)) return false;
         if (_world.MobAt(map, x, y) is not null || _world.PeerAt(map, x, y) is not null) return false;
         foreach (var item in _world.ItemsOn(map))
             if (item.X == x && item.Y == y) return false;
         return true;
+    }
+
+    /// <summary>The ground half of RTK's tile tests (<c>getObject == 0</c>, <c>getPass == 0</c>, <c>not getWarp</c>): no
+    /// map object at all, even one a player walks over, a passable tile, and no warp. A map with no terrain file has
+    /// neither objects nor blocked tiles. <see cref="RtkTileFree"/> asks this and then who stands there; Nature's bloom's
+    /// scatter asks only this (<see cref="LuaScatter"/>). The tile must be on the map.</summary>
+    private static bool RtkTileOpen(ushort map, ushort xs, ushort ys, int x, int y)
+    {
+        var md = MapData.For(map, xs, ys);
+        if (md is not null && (md.Obj(x, y) != 0 || md.Pass(x, y) != 0)) return false;
+        return !Content.TryWarp(map, (ushort)x, (ushort)y, out _);
     }
 
     /// <summary>The first living player on (x,y) of the caster's map, the caster left out, or null: RTK's
@@ -4063,6 +4072,208 @@ public sealed partial class Session
         }
         Log.Info($"      (lua) {sp.Name} -> curse [{category}] {stat}{amount:+0;-0} around ({_char.X},{_char.Y}): {cursed} cursed");
         return cursed;
+    }
+
+    // ---- the Druid spells (RTK rtklua/Accepted/Spells/Subpaths/Druid/) -----------------------------------------------
+    // The engine half of the Druid verbs in game-data/spell_verbs.lua: the drop hook (Control flames, Nature's bloom; built
+    // for Geomancer's Exhume too), the one taken from the bag in a drop, a blow on every creature beside the caster
+    // (Control flames' flames), flowers put down around the caster (Nature's bloom), a heal on everyone and everything
+    // within reach (Sea breeze), and the end of a creature's form (Druid's rodent). Steed is Mount's spawn
+    // (LuaSpawnFaced), and its stag is ridden by the ride key (Session.TryRideHorse).
+    //
+    // LOCKS. As the Barbarian half: a verb runs on the caster's packet thread, inside the caster's monitor and the Lua
+    // gate, never World._lock; a drop hook runs there too, from HandleDropItem. Nothing here takes a new lock or holds two:
+    // another player's line and heal land inside their own monitor (WithState, ReceiveHeal), taken by StateRank, one at a
+    // time; a creature and a floor item are written through World's own methods, which take World._lock inside. The bag is
+    // the caster's own.
+    //
+    // THE GATE'S GAP (#417's review, F1). Waiting for a contended Lua gate lets the caster's monitor go and takes it back
+    // after (Session.State.cs, the one exception Session.Handle documents). A drop that enters Lua is therefore two
+    // critical sections, and a second login's kick or an exchange partner's confirm can take the item between them. So
+    // the drop is decided again after the gap: RunDropHooks enters the gate only when a running wait's spell has a drop
+    // verb (looked up without the gate); a hook spends nothing for a session going away and nothing it no longer holds
+    // (LuaTakeDropped); and HandleDropItem, after a hook declines, drops nothing for a session going away and only the
+    // stack the slot still holds.
+
+    /// <summary>The drop hook (P4; RTK <c>clif_parsedropitem</c>, <c>clif.c:6628-6640</c>, which runs the
+    /// <c>on_drop_while_aether</c> of every spell whose aether is still running, before the item leaves the bag). For each
+    /// wait of the caster's still running whose spell has a SpellParams.csv row, the verb named after that row's verb with
+    /// "_drop" on the end, when spell_verbs.lua has one, is handed the item (<c>ctx.dropped</c>), with that row. The first
+    /// that answers true has taken the drop over (RTK's <c>fakeDrop = 1</c>): true here, and nothing more is dropped. With
+    /// none, false, and the item drops as always. A hook that raises has said "&lt;spell&gt; isn't working right now." and
+    /// the item drops.
+    /// <para>RTK runs every hook and lets the last one's <c>fakeDrop</c> stand, so a hook for another item that resets it
+    /// to 0 would drop the item a hook before it had taken over; and it runs the item's own <c>on_drop</c> first, whose
+    /// <c>fakeDrop</c> a hook resets the same way. Here the first hook to take the drop over keeps it, and the C# drops
+    /// that take an item over (the harvest tools, the rites) are asked before any hook, so neither reset happens. The two
+    /// hooks there are never both wanted: no item is both an acorn and a flower.</para>
+    /// <para>The drop verb is looked up without the Lua gate (<see cref="SpellScript.HasVerbUngated"/>), so a drop with no
+    /// such wait running never enters Lua and stays one critical section; only a hook that is there to run waits for the
+    /// gate, and may lose the monitor while it does (the gate's gap, above). The caller decides the drop again after it.</para></summary>
+    private bool RunDropHooks(ItemDef def)
+    {
+        if (_aether.Count == 0) return false;
+        long now = Environment.TickCount64;
+        foreach (var (key, until) in _aether.ToArray())   // a copy: a hook may arm or clear a wait
+        {
+            if (until <= now || !Content.SpellParams.TryGetValue(key, out var row)) continue;
+            string hook = row.GetValueOrDefault("verb", "") + "_drop";
+            if (!SpellScript.HasVerbUngated(hook) || Content.SpellByKey(key) is not { } sp) continue;
+            if (SpellScript.Run(hook, new SpellContext(this, sp, def.Key), row) != true) continue;
+            Log.Info($"      {sp.Name}(lua): the drop of '{def.Key}' taken over by {hook}");
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Take one of <paramref name="itemKey"/> from the bag as RTK's <c>player:removeItem(yname, 1, 1)</c> takes it
+    /// (<c>ctx:takeDropped</c>; <c>sl.c:8534-8600</c>): from the first stack of it, in slot order, with no engraved name
+    /// that is not full, else from the first with no engraved name. A stack that empties goes with reason 1, "You dropped
+    /// &lt;item&gt;." (the script's third argument); one that does not is redrawn with its new count. False, taking
+    /// nothing, when the caster holds none (an exchange took it in the gate's gap) or is going away (a kick or a logout
+    /// came in the gap: the row they leave with is already written, so nothing spent now would stay spent); the hook then
+    /// does nothing more (#417's review, F1).</summary>
+    internal bool LuaTakeDropped(string itemKey)
+    {
+        if (GoingAway(this)) return false;
+        if (Content.ItemByKey(itemKey) is not { } def) return false;
+        var plain = _char.Inventory.Where(i => i.ItemId == def.Id && string.IsNullOrEmpty(i.CustomName))
+                                   .OrderBy(i => i.Slot).ToList();
+        var it = plain.FirstOrDefault(i => i.Amount < def.StackAmount) ?? plain.FirstOrDefault();
+        if (it is null) return false;
+        if (--it.Amount <= 0) { _char.Inventory.Remove(it); SendDelItem(it.Slot, DelReason.Dropped); }
+        else SendAddItem(it);
+        MarkDirty();
+        return true;
+    }
+
+    /// <summary>Control flames' flames (<c>ctx:strikeAround</c>; RTK <c>Spells/Subpaths/Druid/control_flames.lua:43-57</c>,
+    /// <c>getTargetsAround(player, BL_MOB)</c>, <c>Scripts/scripts.lua:672-724</c>). On each of the caster's four sides,
+    /// north, east, south, west, every living creature there, never an NPC (RTK's NPCs are <c>BL_NPC</c>), takes
+    /// <paramref name="amount"/>, netted against its own armour, with this spell's graphic over it (the script's
+    /// <c>sendAnimation(45, 25)</c>), an HP bar, and its experience if it dies; no deflect roll (RTK rolls none outside a
+    /// cast aimed at a target). When any was struck the spell's sound plays at the caster (the script's
+    /// <c>playSound(708)</c>). Returns how many were struck.</summary>
+    internal int LuaStrikeAround(SpellDef sp, int amount)
+    {
+        if (amount < 1) amount = 1;
+        var row = Content.FxFor(sp);
+        int anim = row is not null ? Content.EffectAnim(row, sp.PathId) : -1;
+        int snd  = row is not null ? Content.EffectSound(row, sp.PathId) : -1;
+        int struck = 0;
+        foreach (var (dx, dy) in AroundNesw)
+        {
+            int cx = _char.X + dx, cy = _char.Y + dy;
+            if (cx < 0 || cy < 0 || cx >= _char.MapXs || cy >= _char.MapYs) continue;
+            foreach (var mob in _world.MobsAt(_char.Map, cx, cy))
+            {
+                if (mob.IsNpc) continue;
+                if (!_world.TryDamage(_char.Map, mob, SpellRaw(amount, mob), out bool died, _char.Id)) continue;
+                BroadcastFx(mob.Id, anim, -1);
+                ShowDamageResult(mob.Id, mob, died);
+                if (died) AwardKillExp((uint)(mob.Exp > 0 ? mob.Exp : mob.MaxHp), _char.Map, mob.X, mob.Y, mob.Key);
+                struck++;
+            }
+        }
+        if (struck > 0) BroadcastFx(_char.Id, -1, snd);
+        Log.Info($"      (lua) {sp.Name} -> flames around ({_char.X},{_char.Y}): {amount} raw, {struck} struck");
+        return struck;
+    }
+
+    /// <summary>Nature's bloom's flowers (<c>ctx:scatter</c>; RTK <c>Spells/Subpaths/Druid/natures_bloom.lua:65-97</c>). One
+    /// <paramref name="itemKey"/> on the caster's own tile, then, for every tile within <paramref name="radius"/> of the
+    /// caster on both axes, row by row as the script's loops run, one more on a <paramref name="chance"/>% roll where the
+    /// tile passes <see cref="RtkTileOpen"/>: no map object, passable, no warp. Who stands or lies there is not looked at
+    /// (the script's own test of that is commented out). A tile past the map's edge is read as the edge tile, as the
+    /// script clamps x and y to 0 and to <c>getMapXMax</c>/<c>getMapYMax</c> (the width and height less one), so near an
+    /// edge an edge tile takes a roll for each tile beyond it. Each flower is an ordinary floor item, nobody's, at its full
+    /// durability, as RTK's <c>dropItemXY(flower, 1, 0, 0, ...)</c> puts one down. Returns how many were put down.</summary>
+    internal int LuaScatter(SpellDef sp, string itemKey, int radius, double chance)
+    {
+        var def = Content.ItemByKey(itemKey)
+                  ?? throw new InvalidOperationException($"{sp.Key}: no item '{itemKey}' in Items.csv to scatter");
+        ushort map = _char.Map, xs = _char.MapXs, ys = _char.MapYs;
+        int cx = _char.X, cy = _char.Y, put = 0;
+        Put(cx, cy);
+        for (int y = cy - radius; y <= cy + radius; y++)
+            for (int x = cx - radius; x <= cx + radius; x++)
+            {
+                int tx = Math.Clamp(x, 0, xs - 1), ty = Math.Clamp(y, 0, ys - 1);
+                if (RtkTileOpen(map, xs, ys, tx, ty) && LuaRoll(chance)) Put(tx, ty);
+            }
+        Log.Info($"      (lua) {sp.Name} -> {put} {def.Key} around ({cx},{cy}) on map {map}");
+        return put;
+
+        void Put(int x, int y)
+        {
+            _world.DropItem(map, new GroundItem { Id = _world.AllocateItemId(), ItemId = def.Id, X = (ushort)x, Y = (ushort)y,
+                                                  Amount = 1, Dura = def.Durability, Graphic = def.Icon });
+            put++;
+        }
+    }
+
+    /// <summary>Sea breeze (<c>ctx:healRange</c>; RTK <c>Spells/Subpaths/Druid/sea_breeze.lua:21-37</c>): everyone RTK's
+    /// <c>getObjectsInArea(BL_ALL)</c> lists within <c>distanceSquare(player, target, 10)</c>, that is every player and
+    /// every creature within <paramref name="range"/> tiles of the caster on both axes, the caster among them. A player
+    /// reads <paramref name="line"/>, then each gets the spell's graphic and <paramref name="amount"/> vita, capped at their
+    /// maximum, with their HP bar; a ghost gets the line and the graphic and no vita (RTK's <c>addHealthExtend</c> returns
+    /// at <c>state == 1</c>). A creature is any but an NPC (RTK's NPCs are <c>BL_NPC</c>), whoever's it is, the hostile
+    /// ones too. No PK test: a heal lands on anyone. The spell's sound plays at the caster, who is always among them.
+    /// Returns how many, the caster included.
+    /// <para><b>Locks.</b> Who stands on the map is <see cref="World.View"/>'s snapshot, as Lightning storm's sweep reads
+    /// it: the peers (the caster left out, then taken here) with their tiles read under the world lock, filtered after it
+    /// is released; a session a second login replaced is left out. Each other player's line and heal are written inside
+    /// their own monitor (<c>WithState</c>, <see cref="ReceiveHeal"/>), one at a time; a creature's through
+    /// <see cref="World.HealMob"/>.</para></summary>
+    internal int LuaHealRange(SpellDef sp, int amount, int range, string line)
+    {
+        var row = Content.FxFor(sp);
+        int anim = row is not null ? Content.EffectAnim(row, sp.PathId) : -1;
+        int snd  = row is not null ? Content.EffectSound(row, sp.PathId) : -1;
+        int cx = _char.X, cy = _char.Y, healed = 1;
+        SendMiniText(line);
+        BroadcastFx(_char.Id, anim, -1);
+        if (amount > 0 && !IsDead)
+        {
+            _char.Hp = Math.Min(EffMaxHp, _char.Hp + (uint)amount);
+            byte selfPct = PlayerHpPercent();
+            _world.BroadcastWideArea(_char.Map, _char.X, _char.Y, p => p.DamageOver(_char.Id, selfPct, HealBarCritByte));
+        }
+        SendStats();
+        var (peers, mobs) = _world.View(this, _char.Map);
+        foreach (var peer in peers)
+        {
+            if (peer.Session.IsReplaced) continue;
+            if (Math.Max(Math.Abs(peer.X - cx), Math.Abs(peer.Y - cy)) > range) continue;
+            var target = peer.Session;
+            target.WithState(() => target.SendMiniText(line));
+            BroadcastFx(peer.Id, anim, -1);
+            target.ReceiveHeal(amount);
+            healed++;
+        }
+        foreach (var mob in mobs)
+        {
+            if (!mob.Alive || mob.IsNpc) continue;
+            int mx = mob.X, my = mob.Y;                          // once, as SyncMobs reads them
+            if (Math.Max(Math.Abs(mx - cx), Math.Abs(my - cy)) > range) continue;
+            BroadcastFx(mob.Id, anim, -1);
+            if (_world.HealMob(mob, amount))
+                _world.BroadcastWideArea(_char.Map, mob.X, mob.Y, p => p.DamageOver(mob.Id, HpPercent(mob), 0));
+            healed++;
+        }
+        BroadcastFx(_char.Id, -1, snd);
+        Log.Info($"      (lua) {sp.Name} -> {range}-tile heal {amount}, {healed} healed (the caster included)");
+        return healed;
+    }
+
+    /// <summary>End the caster's creature form now (<c>ctx:endMorph</c>; RTK's <c>removeDuras(morphs)</c>, Druid's rodent's
+    /// recast): the look and its buff box line go, as when the form runs out (<see cref="RevertMorph"/>). False with
+    /// none.</summary>
+    internal bool LuaEndMorph()
+    {
+        if (!IsMorphed) return false;
+        RevertMorph();
+        return true;
     }
 
     // ---- combat-stray primitives (sacrifice strikes + ambush) ----------------------------------------------
