@@ -647,76 +647,84 @@ public sealed class SubpathTeacherTests
                     $"Druid spells lost [{string.Join(", ", lostNine)}]; named versions missing [{string.Join(", ", named)}]");
     }
 
-    /// <summary>RTK's four versions of the Poet spells the next fact names, copied from its swap lists here rather than
-    /// read from the server's table (<c>rtklua/Accepted/Scripts/swapAlignment.lua</c>, unaligned, Kwi-Sin, Ming-Ken and
-    /// Ohaeng; a swap turns a held spell into the same row's spell of the new alignment, lines 531-537). Each row's four
-    /// lines are given. The Caterpillar's Ming-Ken version is the one RTK's Caterpillar script defines
-    /// (<c>rtklua/Accepted/Spells/poet/cotw_caterpillar.lua</c>:99); the list writes Kwi-Sin's word at line 379.</summary>
-    private static readonly string[][] RtkPoetVersions =
+    /// <summary>The books <see cref="ADevoteAtAShrineOrARenounceAtTheSummitKeepsRtksVersionOfEveryHeldSpell"/> runs:
+    /// rank 3, and rank 2 with the first Sage rung (rank 2 without one fits the book, so nothing is cut); each move to
+    /// and from Unaligned; and each way of choosing the forgotten spells (the first entries, the last, an even spread,
+    /// three fixed-seed picks, and the first with a held lower rung in place of a ladder's top).</summary>
+    public static IEnumerable<object[]> DevoteBooks()
     {
-        new[] { "purge_poet", "cure_illness_poet", "restore_health_poet", "remove_poison_poet" },              // 92, 209, 326, 443
-        new[] { "invoke_poet", "spirits_power_poet", "life_force_poet", "gather_magic_poet" },                  // 97, 214, 331, 448
-        new[] { "resurrect_poet", "return_spirit_poet", "mingken_blessing_poet", "death_undone_poet" },        // 139, 256, 373, 490
-        new[] { "cotw_caterpillar_poet", "kwisin_companion_poet", "mingken_companion_poet", "ohaeng_companion_poet" },
-                                                                                                                // 145, 262, 379, 496
-        new[] { "cotw_fluffy_dog_poet", "kwisin_assistant_poet", "mingken_assistant_poet", "ohaeng_assistant_poet" },
-                                                                                                                // 146, 263, 380, 497
-        new[] { "cotw_panda_bear_poet", "kwisin_protector_poet", "mingken_protector_poet", "ohaeng_protector_poet" },
-                                                                                                                // 147, 264, 381, 498
-        new[] { "cotw_wild_monkey_poet", "kwisin_fighter_poet", "mingken_fighter_poet", "ohaeng_fighter_poet" }, // 148, 265, 382, 499
-        new[] { "cotw_gorilla_poet", "kwisin_warrior_poet", "mingken_warrior_poet", "ohaeng_warrior_poet" },     // 149, 266, 383, 500
-        new[] { "cotw_wind_dancer_poet", "kwisin_champion_poet", "mingken_champion_poet", "ohaeng_champion_poet" },
-                                                                                                                // 150, 267, 384, 501
-        new[] { "cotw_wind_warrior_poet", "kwisin_avatar_poet", "mingken_avatar_poet", "ohaeng_avatar_poet" },   // 151, 268, 385, 502
-    };
+        var moves = new[] { (0, 1), (0, 2), (0, 3), (1, 0), (2, 0), (3, 0) };
+        var shapes = new[] { "first", "last", "spread", "seed1", "seed2", "seed3", "rung" };
+        foreach (var (mark, sage) in new[] { (3, 0), (2, 1) })
+            foreach (var (from, to) in moves)
+                foreach (var shape in shapes) yield return new object[] { mark, sage, from, to, shape };
+    }
 
-    /// <summary>A devote at an alignment's shrine, or a renounce at the summit, past the cap keeps the new alignment's
-    /// version of every spell the book held (#417's re-check, F6; its N6 probe, ported). A rank-3 Druid in alignment
-    /// <paramref name="from"/> holds all nine Druid spells and that alignment's Poet set owed less its first entries, as
-    /// many as made room for the nine (52 in all). From Unaligned they answer the catechism of the shrine of
-    /// <paramref name="to"/> to its end and dedicate for life (<c>AlignmentAbility</c>); to Unaligned they say "cleanse
-    /// curse" to the Tiger Palace summit's shaman and take his help (<c>SummitAbility</c>). Both end in
-    /// <c>NpcContext.Devote</c>, which rebuilds the book at the new alignment. The pairs are named here, not read from the
-    /// server: RTK's swap lists for the Poet spells (<see cref="RtkPoetVersions"/>) and the live poet page's Sam san
-    /// families (<see cref="SamSanAlignedRowTests.Families"/>). Of each named spell the book held, the new alignment's
-    /// version is in the book; of the spells the book had forgotten, none comes back (the new alignment owes as many, so
-    /// there is no room); all nine Druid spells stay; the book is full at 52. Red with the content's adjacency families
-    /// deciding held (ccfa08b): from Unaligned the new versions of the Gorilla, the Wind dancer, the Wind warrior and
-    /// Charge of Life are cut and four forgotten spells come back; a renounce cuts the Wild monkey's, the Wind dancer's,
-    /// the Wind warrior's and Charge of Life's.</summary>
+    /// <summary>A devote at an alignment's shrine, or a renounce at the summit, past the cap leaves the book holding
+    /// exactly RTK's new version of every spell it held (#417's re-check, F6, its N6 probe; the delta re-check's D1, its
+    /// probe's book shapes). A level-99 Druid of rank <paramref name="mark"/> (with Sage rung <paramref name="sage"/>) in
+    /// alignment <paramref name="from"/> holds every Druid spell their rank sells and that alignment's Poet set owed, less
+    /// as many entries as made room for them (52 in all), chosen by <paramref name="shape"/>. From Unaligned they answer
+    /// the catechism of the shrine of <paramref name="to"/> to its end and dedicate for life (<c>AlignmentAbility</c>);
+    /// to Unaligned they say "cleanse curse" to the Tiger Palace summit's shaman and take his help
+    /// (<c>SummitAbility</c>). Both end in <c>NpcContext.Devote</c>, which rebuilds the book at the new alignment.
+    /// <para>The versions are the test's own (<see cref="AlignmentPairRows"/>: RTK's swap lists, embedded with their line
+    /// numbers, and the Sam san families from the live poet page), never the server's table. First, those rows carry the
+    /// old alignment's owed set onto the new one's, entry for entry, both ways. Then the book after is exactly the new
+    /// version of each spell the book held and the Druid spells: nothing held is missing, nothing forgotten comes back
+    /// (the new alignment owes as many, so there is no room), 52 slots. In the "rung" book the member holds Heal in place
+    /// of Water of life, its heal ladder's top, and the top's new version stays (#417's review, F3). Because the
+    /// forgotten spells differ from book to book, a row of the server's table pointed at another row's version cuts a
+    /// held spell's version and hands a forgotten one back in some book.</para>
+    /// <para>Red with the content's adjacency families deciding held (ccfa08b), and with rows 112 and 113's Kwi-Sin
+    /// cells swapped in the server's table.</para></summary>
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(0, 2)]
-    [InlineData(0, 3)]
-    [InlineData(1, 0)]
-    [InlineData(2, 0)]
-    [InlineData(3, 0)]
-    public void ADevoteAtAShrineOrARenounceAtTheSummitKeepsRtksVersionOfEveryHeldSpell(int from, int to)
+    [MemberData(nameof(DevoteBooks))]
+    public void ADevoteAtAShrineOrARenounceAtTheSummitKeepsRtksVersionOfEveryHeldSpell(int mark, int sage, int from, int to,
+                                                                                       string shape)
     {
         int druid = Content.PathIdForClass("Druid");
-        var nine = Content.SubpathTeacherSpells(druid, Content.MarkSpellLevel, Content.MaxMark);
-        var owedFrom = Content.RespecSpellSet(druid, 99, alignment: from, mark: 3);
-        int forgot = owedFrom.Count + nine.Count - Content.SpellBookCap;
-        Assert.True(forgot > 0, $"a rank-3 Druid in alignment {from} is owed {owedFrom.Count} + {nine.Count}, inside the book");
-        Assert.Equal(owedFrom.Count, Content.RespecSpellSet(druid, 99, alignment: to, mark: 3).Count);
-        var forgotten = owedFrom.Take(forgot).ToList();
-        var book = owedFrom.Where(sp => !forgotten.Contains(sp)).Concat(nine).Select(sp => sp.Id).ToList();
-        var versions = RtkPoetVersions
-            .Concat(SamSanAlignedRowTests.Families.Where(f => f.Base.EndsWith("_poet", StringComparison.Ordinal))
-                                                  .Select(f => f.Rows.Select(r => r.Key).Prepend(f.Base).ToArray()))
-            .ToList();
-        string[]? RowOf(string key) => versions.FirstOrDefault(v => v.Contains(key));
-        bool Held(string key) => book.Contains(Content.SpellByKey(key)!.Id);
-        // Soothe and Gateway are one row at every alignment; every other forgotten spell is named, so "back" is judged;
-        // and every named spell not forgotten is held, so "kept" is judged for each.
-        foreach (var f in forgotten)
-            Assert.True(f.Alignment < 0 || RowOf(f.Key) is not null, $"the forgotten {f.Key} is not named here");
-        var heldRows = versions.Where(v => !forgotten.Any(f => v.Contains(f.Key))).ToList();
-        Assert.True(heldRows.All(v => Held(v[from])),
-                    $"not in the book: {string.Join(", ", heldRows.Where(v => !Held(v[from])).Select(v => v[from]))}");
+        var druidSpells = Content.SubpathTeacherSpells(druid, 99, mark);
+        var owedFrom = Content.RespecSpellSet(druid, 99, alignment: from, mark: mark, sageRung: sage);
+        var owedTo = Content.RespecSpellSet(druid, 99, alignment: to, mark: mark, sageRung: sage);
+        int forgot = owedFrom.Count + druidSpells.Count - Content.SpellBookCap;
+        string head = $"rank {mark} sage {sage} {from} to {to} {shape}: owed {owedFrom.Count}/{owedTo.Count} + {druidSpells.Count}";
+        Assert.True(forgot > 0, $"{head}: inside the book, nothing to judge");
+
+        var toKeys = owedTo.Select(sp => sp.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var noVersion = owedFrom.Where(sp => !toKeys.Contains(AlignmentPairRows.VersionIn(sp, to))).Select(sp => sp.Key).ToList();
+        var image = owedFrom.Select(sp => AlignmentPairRows.VersionIn(sp, to)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unreached = owedTo.Where(sp => !image.Contains(sp.Key)).Select(sp => sp.Key).ToList();
+        Assert.True(noVersion.Count == 0 && unreached.Count == 0,
+                    $"{head}: version not owed [{string.Join(", ", noVersion)}]; owed, no version of the old set " +
+                    $"[{string.Join(", ", unreached)}]");
+
+        var forgotten = shape switch
+        {
+            "first" or "rung" => owedFrom.Take(forgot).ToList(),
+            "last" => owedFrom.TakeLast(forgot).ToList(),
+            "spread" => Enumerable.Range(0, forgot).Select(i => owedFrom[(2 * i + 1) * owedFrom.Count / (2 * forgot)]).ToList(),
+            _ => Shuffled(owedFrom, int.Parse(shape[4..]) * 7919 + mark * 31 + from * 7 + to).Take(forgot).ToList(),
+        };
+        var kept = owedFrom.Where(sp => !forgotten.Contains(sp)).ToList();
+        var held = kept.ToList();
+        string swapped = "";
+        if (shape == "rung")
+        {
+            var top = Content.SpellByKey(AlignmentPairRows.RowOf("water_of_life_poet")![from])!;
+            var lower = Content.SpellByKey(AlignmentPairRows.RowOf("heal_poet")![from])!;
+            int at = held.FindIndex(sp => sp.Id == top.Id);
+            Assert.True(at >= 0, $"{head}: {top.Key} is not in the book");
+            held[at] = lower;
+            swapped = $"; the book holds {lower.Key} for {top.Key}";
+        }
+        var book = held.Concat(druidSpells).Select(sp => sp.Id).ToList();
+        var expected = kept.Select(sp => AlignmentPairRows.VersionIn(sp, to)).Concat(druidSpells.Select(sp => sp.Key))
+                           .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var (s, _, c) = Member("Druid", 99, ch =>
         {
-            ch.Mark = 3;
+            ch.Mark = (byte)mark;
+            if (sage > 0) ch.Quests[Content.SageRungReg] = sage;
             ch.Alignment = (byte)from;
             ch.MaxHp = 30_000; ch.MaxMp = 20_000;     // the summit's floor is 20,000 and 10,000
             ch.Spells.AddRange(book);
@@ -735,29 +743,50 @@ public sealed class SubpathTeacherTests
             SayTo<SummitAbility>(s, Content.Npcs.Single(n => n.Key == "SummitNpc"), "cleanse curse",
                                  NextFrame(), NextFrame(), NextFrame(), NextFrame(), Pick(1));
 
-        bool Has(string key) => c.Spells.Contains(Content.SpellByKey(key)!.Id);
-        var missing = heldRows.Where(v => !Has(v[to])).Select(v => $"{v[from]}->{v[to]}").ToList();
-        var back = forgotten.Select(f => RowOf(f.Key)?[to] ?? f.Key).Where(Has).ToList();
-        var lostNine = nine.Where(n => !c.Spells.Contains(n.Id)).Select(n => n.Key).ToList();
-        string line = $"{from} to {to}: alignment now {c.Alignment}, {c.Spells.Count} slots; held, new version missing " +
-                      $"[{string.Join(", ", missing)}]; forgotten back [{string.Join(", ", back)}]; Druid spells lost " +
-                      $"[{string.Join(", ", lostNine)}]; {heldRows.Count} named spells held";
+        var now = c.Spells.Select(id => Content.SpellById(id)!.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = expected.Where(k => !now.Contains(k)).ToList();
+        var extra = now.Where(k => !expected.Contains(k)).ToList();
+        var back = forgotten.Select(f => AlignmentPairRows.VersionIn(f, to)).Where(now.Contains).ToList();
+        string line = $"{head}; forgot [{string.Join(", ", forgotten.Select(f => f.Key))}]{swapped}; alignment now " +
+                      $"{c.Alignment}, {c.Spells.Count} slots; held, new version missing [{string.Join(", ", missing)}]; " +
+                      $"not expected [{string.Join(", ", extra)}]; forgotten back [{string.Join(", ", back)}]";
         _out.WriteLine(line);
-        Assert.True(c.Alignment == to && c.Spells.Count == Content.SpellBookCap && missing.Count == 0 && back.Count == 0
-                    && lostNine.Count == 0, line);
+        Assert.True(c.Alignment == to && c.Spells.Count == Content.SpellBookCap && missing.Count == 0 && extra.Count == 0
+                    && back.Count == 0, line);
     }
 
-    /// <summary>Every aligned row of the content is in the declared pairing that decides "held" at a devote or a renounce
-    /// past the cap (<c>Content.AlignmentPairOf</c>; #417's re-check, F6), under a key that is a loaded unaligned row. A
-    /// row the pairing does not name is held only by its own id, so the cut can take its new version from a member who
-    /// held it; the message names each such row, for the pairing's table. Red with Siege's row taken out of the
-    /// table.</summary>
+    /// <summary><paramref name="list"/> in an order fixed by <paramref name="seed"/>.</summary>
+    private static List<SpellDef> Shuffled(List<SpellDef> list, int seed)
+    {
+        var rng = new Random(seed);
+        return list.Select(sp => (sp, r: rng.Next())).OrderBy(x => x.r).Select(x => x.sp).ToList();
+    }
+
+    /// <summary>The declared pairing that decides "held" at a devote or a renounce past the cap
+    /// (<c>Content.AlignmentPairOf</c>; #417's re-check, F6) pairs each loaded row with exactly its own versions (the
+    /// delta re-check, D1). The expected versions are the test's own (<see cref="AlignmentPairRows"/>: RTK's swap lists
+    /// with each class suffix, Siege, the split traps and the ten Sam san families). For every loaded row, the rows the
+    /// server pairs it with are exactly the loaded rows of its expected row, or none for a row no expected row names.
+    /// Every aligned row is paired, under a loaded unaligned row. The message names each row that differs. Red with rows
+    /// 112 and 113's Kwi-Sin cells swapped, with two other rows' Ming-Ken cells swapped, with Charge of Life's three
+    /// pointed at Ensure, and with Siege's row taken out.</summary>
     [Fact]
     public void EveryAlignedRowIsInTheDeclaredPairing()
     {
+        var loaded = Content.Spells.Select(sp => sp.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var paired = Content.Spells.GroupBy(sp => Content.AlignmentPairKey(sp.Key), StringComparer.OrdinalIgnoreCase)
+                                   .ToDictionary(g => g.Key, g => g.Select(sp => sp.Key).ToHashSet(StringComparer.OrdinalIgnoreCase),
+                                                 StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
-        foreach (var sp in Content.Spells.Where(sp => sp.Alignment is >= 1 and <= 3))
+        foreach (var sp in Content.Spells)
         {
+            var want = AlignmentPairRows.RowOf(sp.Key)?.Where(loaded.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                       ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sp.Key };
+            var got = paired[Content.AlignmentPairKey(sp.Key)];
+            if (!got.SetEquals(want))
+                problems.Add($"{sp.Key}: paired with [{string.Join(", ", got.OrderBy(k => k))}], want " +
+                             $"[{string.Join(", ", want.OrderBy(k => k))}]");
+            if (sp.Alignment is < 1 or > 3) continue;
             string pair = Content.AlignmentPairKey(sp.Key);
             if (pair == sp.Key) problems.Add($"{sp.Key} (alignment {sp.Alignment}): not in the pairing");
             else if (Content.SpellByKey(pair) is not { Alignment: 0 })
