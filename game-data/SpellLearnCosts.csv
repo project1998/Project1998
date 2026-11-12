@@ -667,6 +667,12 @@ balance_weapon,18,99,60000,ee_san_spike,1,electra,4,dragons_liver,4,,,rtk-lua
 master_weapon,18,99,60000,ee_san_spike,1,electra,4,dragons_liver,4,,,rtk-lua
 ki_strike,18,99,500,acorn,70,amber,1,,,,,rtk-lua
 crossing_swords,18,99,50000,spike,1,chung_ryong_key,1,dragons_liver,1,,,rtk-lua
+skill_up_ranger,15,0,0,,,,,,,,,rtk-lua
+forest_cover,15,0,0,,,,,,,,,rtk-lua
+tree_bark,15,99,0,moon_helm,1,tigers_heart,20,charm,1,,,rtk-lua
+set_pit_trap,15,99,350,fine_rabbit_meat,2,,,,,,,rtk-lua
+carve_arrow,15,0,0,,,,,,,,,rtk-lua
+scouting_trip,15,99,50000,surge,1,ju_jak_key,1,,,,,rtk-lua
 skill_up_spy,19,0,0,,,,,,,,,rtk-lua
 incognito,19,99,0,fox_tail,1,topaz,1,,,,,rtk-lua
 hear_footstep_spy,19,99,0,fox_tail,1,topaz,1,,,,,rtk-lua

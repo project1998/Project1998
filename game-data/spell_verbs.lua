@@ -3101,3 +3101,229 @@ function verbs.dagger_to_throat(ctx, row)
   end
   return true
 end
+
+-- =========================================================================================================
+-- RANGER (PC subpath; RTK rtklua/Accepted/Spells/Subpaths/Ranger/ and NPCs/trap/rogue_traps/Ranger/). The project
+-- owner, 2026-10-26 (P5, each spell as its RTK script; P1 and P3, on sale once it works, at its script's price), and
+-- 2026-11-12 for Scouting trip's boxes ("Plain boxes": RTK's cannot run as written, at verbs.scouting_trip). The verbs
+-- here are Pit trap, Carve arrow, Call companion and Scouting trip, and Skill up's lines (RAGE_LINES.skill_up_ranger, on
+-- the Spy region's skill_up ladder). The others are rows on verbs that exist: Forest cover on Muse's disguise (Costume's
+-- script with Ranger's numbers), Tree bark on Chongun's invincible (Invincibility's script with Ranger's numbers, as its
+-- own comment says; its ward is in the hard-body set, Session.HardBodyWarded, so it stops swings only). Each is bound by
+-- its SpellParams.csv row, which carries its numbers, and is the shape of its script, in that script's order. RTK is
+-- weight 0 for balance; these numbers are its scripts', as RTK under P5. Call companion is built and not sold: its price
+-- names boiled_meat, an item in no table here or in RTK.
+--
+-- Where the port parts from the scripts, on purpose, as the subpath verbs above part:
+--   * Each wait is checked first, with this file's own line (subpath_waiting, or the ladder's gate). RTK waives Skill
+--     up's, Carve arrow's (its mana check too), Call companion's (its mana too) and Scouting trip's (its mana too) for a
+--     GM; no verb here waives anything for staff.
+--   * A ghost and a mounted caster cast nothing (the engine's gates), where Skill up's canCast(0, ...) lets a ghost and
+--     Scouting trip's script has no canCast at all. The cast pose is the engine's, on a cast that lands.
+--   * A later cast does not drop Carve arrow's, Call companion's or Scouting trip's open menu or box (RTK's cast
+--     handler frees a waiting script, sl_async_freeco), as for every menu here.
+--   * Scouting trip's input box carries the script's question alone: RTK's two lines either side of the entry field
+--     ("The noble", "has been scouting with me" or "needs their mark removed.") are not sent, as no input box here
+--     sends them (Read karma's departure). A typed name is trimmed and found in any case, as every typed name here is.
+--   * Scouting trip's legend is written with the caster's name in it: RTK writes "$player" with the caster's id beside
+--     it and puts their name in at each showing (rtk/src/map/clif.c, the legends' tchaid), which this server's legends,
+--     text alone, do not carry. The name is the one the caster has when they mark.
+--   * Carve arrow's materials are taken with RTK's lines and order; an arrow that does not fit in the bag lies as a
+--     pile of its own at the caster's feet, where RTK adds it to a matching pile already on that tile (rtk/src/map/pc.c,
+--     pc_addtocurrent2): this server's floor never merges piles.
+--   * A Pit trap's owner who logs out and back in inside its 20 s is gone to it here (the entity id is per login);
+--     RTK finds them again by character id. The rest of the trap's rules are World.cs's (the Pit trap block).
+-- =========================================================================================================
+
+-- Skill up (RTK Subpaths/Ranger/skill_up.lua, Spy's skill_up.lua under the key skill_up_ranger, diffed: nothing else
+-- differs): Spy's ladder (RAGE_LADDERS.skill_up, tier 6 the script's own though its comment says "TESTING ONLY") and
+-- these lines, each after "[Skill up N] ". Its row's category names the ladder.
+RAGE_LINES.skill_up_ranger = {
+  "Your senses sharpen.",
+  "You hone your skills.",
+  "Agility becomes your strongest suit..",
+  "Acquiring cat-like reflex.",
+  "Incredible skill!",
+  "Sagat would be jealous.",
+}
+
+-- Pit trap (RTK Subpaths/Ranger/pit_trap.lua, the table set_pit_trap; its trap NPC is NPCs/trap/rogue_traps/Ranger/
+-- pit_trap.lua). Short of `mana`, "Your will is too weak.", for free. Then a pit trap on the caster's tile, owned by the
+-- caster, gone in `durationMax` ms if nothing has sprung it (ctx:setTrap; RTK addNPC(..., 2, 1000, 20000, player.ID)),
+-- the mana, and the engine's "You cast Pit trap.", the script's only line. No wait: the script's aethers is never used.
+-- Its playSound(0) is silence here, as the rogue traps' is. What the trap does when sprung is World.cs's Pit trap
+-- block. Row: mana 1000, durationMax 20000.
+local PIT_TRAP_KIND = "pit_trap"
+
+function verbs.pit_trap(ctx, row)
+  local mana = row.mana or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return false end
+  ctx:setTrap(PIT_TRAP_KIND, row.durationMax or 0)
+  ctx:debitMana(mana)
+  return true
+end
+
+-- Carve arrow (RTK Subpaths/Ranger/carve_arrow.lua), two steps: the cast, then the menu's pick, which asks again. The
+-- cast: inside its wait, the wait line; short of `mana`, "Your will is too weak." (the script checks 8,000 and never
+-- takes it); then "You cast Carve arrow.", the `duration` ms wait, and RTK's menu "What do you wish to make, Ranger?"
+-- over the five arrows and, from marks 1 to 4, Sleep, Explosive, Dark and Deamon (the list is fixed at the cast and
+-- carried to each pick). The pick: short of 3 Ginko wood, the box "You need some ginko wood to make this arrow."; short
+-- of the arrow's reagent, the box "You need a <reagent> to make this arrow." (its Items.csv name); either ends it. Else
+-- the 3 Ginko wood and the reagent go (ctx:takeItem, RTK's removeItem), one of the arrow comes (ctx:giveItem, RTK's
+-- addItem: onto the floor of the caster's tile when the bag is full) and the menu comes again, until it is closed. A
+-- closed menu makes nothing; the wait is armed by then. Row: mana 8000, duration 10000000.
+local CARVE_PROMPT = "What do you wish to make, Ranger?"
+local CARVE_WOOD, CARVE_WOOD_N = "ginko_wood", 3
+local CARVE_ARROWS = {
+  ["Basic wooden"] = { reagent = "chestnut",      arrow = "ranger_arrows" },
+  ["Split head"]   = { reagent = "chestnut",      arrow = "split_head_arrows" },
+  ["Cursed head"]  = { reagent = "chestnut",      arrow = "cursed_head_arrows" },
+  ["Flame head"]   = { reagent = "pebble",        arrow = "flame_head_arrows" },
+  ["Steel tip"]    = { reagent = "metal",         arrow = "steel_tip_arrows" },
+  ["Sleep"]        = { reagent = "limestone",     arrow = "sleep_arrows" },
+  ["Explosive"]    = { reagent = "limestone",     arrow = "explosive_arrows" },
+  ["Dark"]         = { reagent = "tainted_staff", arrow = "dark_arrows" },
+  ["Deamon"]       = { reagent = "tainted_staff", arrow = "deamon_arrows" },
+}
+local CARVE_BY_MARK = { "Sleep", "Explosive", "Dark", "Deamon" }   -- if player.mark >= 1 .. 4
+
+function verbs.carve_arrow(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  if ctx.mp < (row.mana or 0) then ctx:say("Your will is too weak."); return false end
+  ctx:say("You cast " .. ctx.spellName .. ".")
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  local options = "Basic wooden|Split head|Cursed head|Flame head|Steel tip"
+  for rank, name in ipairs(CARVE_BY_MARK) do
+    if ctx.mark >= rank then options = options .. "|" .. name end
+  end
+  ctx:menu(CARVE_PROMPT, options, "carve_arrow_pick", options)
+  ctx:narrated()                                                   -- its line comes before the menu
+  return true
+end
+
+function verbs.carve_arrow_pick(ctx, row)
+  local carve = CARVE_ARROWS[ctx.answer]
+  if not carve then return false end
+  if ctx:itemCount(CARVE_WOOD) < CARVE_WOOD_N then
+    ctx:dialog("You need some ginko wood to make this arrow.")
+    return false
+  end
+  if ctx:itemCount(carve.reagent) < 1 then
+    ctx:dialog("You need a " .. ctx:itemName(carve.reagent) .. " to make this arrow.")
+    return false
+  end
+  ctx:takeItem(CARVE_WOOD, CARVE_WOOD_N)
+  ctx:takeItem(carve.reagent, 1)
+  ctx:giveItem(carve.arrow, 1)
+  ctx:menu(CARVE_PROMPT, ctx.carried, "carve_arrow_pick", ctx.carried)   -- the script's while loop
+  return true
+end
+
+-- Call companion (RTK Subpaths/Ranger/call_companion.lua, Employ troop's body with its own menu). Inside its wait, the
+-- wait line; short of `mana`, "Your will is too weak.", for free. Then the spell's sound (22), "You cast Call
+-- companion.", the mana and the `duration` ms wait, all before the menu, as the script orders them, and RTK's menu
+-- "Which creature do you wish to call?" over its seven creatures, no portrait. The pick runs companion_pick: that
+-- creature (mobs.csv call_companion_*, RTK's ids 708-714) owned by the caster for `durationMax` ms, on the faced tile
+-- unless it is blocked or a creature or player stands there, else on the caster's own (ctx:summonTroop, RTK's
+-- cotw_SpawnSetThreat, with Employ troop's kept departure: no threat bump on the caster's attacker), then "You summon a
+-- <creature>" (no full stop, as the script). A closed menu summons nothing; the mana and the wait are gone. Row: mana
+-- 2000, duration 420000, durationMax 600000.
+local COMPANION_PROMPT  = "Which creature do you wish to call?"
+local COMPANION_OPTIONS = "Red wolf|Green squirrel|Black lobster|Rabbit|Fox|Bear|Tiger"
+local COMPANIONS = {
+  ["Red wolf"] = "call_companion_red_wolf", ["Green squirrel"] = "call_companion_green_squirrel",
+  ["Black lobster"] = "call_companion_black_lobster", ["Rabbit"] = "call_companion_rabbit",
+  ["Fox"] = "call_companion_fox", ["Bear"] = "call_companion_bear", ["Tiger"] = "call_companion_tiger",
+}
+
+function verbs.companion_menu(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  local mana = row.mana or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return false end
+  ctx:fxSelf()                                                     -- its playSound(22)
+  ctx:say("You cast " .. ctx.spellName .. ".")
+  ctx:debitMana(mana)
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  ctx:menu(COMPANION_PROMPT, COMPANION_OPTIONS, "companion_pick")
+  ctx:narrated()                                                   -- its line comes before the menu
+  return true
+end
+
+function verbs.companion_pick(ctx, row)
+  local key = COMPANIONS[ctx.answer]
+  if not key then return false end
+  local name = ctx:summonTroop(key, row.durationMax or 0)
+  if name ~= "" then ctx:say("You summon a " .. name) end
+  return true
+end
+
+-- Scouting trip (RTK Subpaths/Ranger/scouting_trip.lua), four steps, because the script waits three times (its menu,
+-- then a typed name, then its box). The cast: inside its wait, the wait line; short of `mana`, "Your will is too
+-- weak.", for free; then the mana and the `duration` ms wait, both before the menu, as the script orders them, and
+-- RTK's menu "What do you wish to do?" over "Mark a person" and "Remove a mark". No "You cast" line: the script sends
+-- none. The pick asks the name in an input box ("Who will be granted the mark?" or "Who will have their mark
+-- removed?"). The name, each refusal a plain box that ends it, in the script's order: anything but letters, spaces and
+-- an apostrophe, "You can only enter letters and spaces." (RTK inputLetterCheck, after which the script stops on
+-- Player(nil)); nobody online by it, "That player is currently not online."; the caster, "You cannot provide your own
+-- recognition."; on another map or more than SCOUT_RANGE tiles off on either axis, "That person is not near you."
+-- (distanceSquare). Then, inside the named player's own monitor, the mark: their saved registry count
+-- scouted_with_rangers one more, their old legend gone and a new one at the end, "Scouted with Rangers N times, marked
+-- by <caster> (<date>)" in icon 12 and colour 1 (ctx:markTarget); or the unmark: the count 0 and the legend gone
+-- (ctx:unmarkTarget). Then the caster's box with the next arrow, "<player> has been recognized for scouting." or
+-- "<player> has had their mark removed.", and once the caster answers it, one box with no button to the player, "You
+-- have been recognized for scouting with the Rangers." or "You have had your mark removed for Scouting with Rangers by
+-- <caster>.", which drops any conversation they had waiting (RTK's target:freeAsync()); the caster's script ends there
+-- (ctx:dialogThenTarget). Row: mana 2000, duration 25000000.
+-- The boxes are plain, with no portrait, and the player's box waits for nothing: the project owner's answer
+-- (2026-11-12, "Plain boxes"). RTK's cannot run as written: each is dialogSeq({t, text}, ...) with `t` a global nothing
+-- sets, so dialogSeq sets dialogType 1 (rtklua/Accepted/player.lua), whose branch of the engine's box draws the NPC it
+-- looks up by the caster's own id with no check that there is one (rtk/src/map/clif.c, clif_scriptmes); and the
+-- player's box is sent from the caster's coroutine, which then waits for a reply that the player's answer never brings.
+local SCOUT_KEY    = "scouted_with_rangers"      -- the player's registry key, and its legend's name
+local SCOUT_MARK   = "Mark a person"
+local SCOUT_UNMARK = "Remove a mark"
+local SCOUT_RANGE  = 10                          -- distanceSquare(player, target, 10)
+local SCOUT_ICON, SCOUT_COLOR = 12, 1            -- addLegend(..., "scouted_with_rangers", 12, 1, player.ID)
+
+function verbs.scouting_trip(ctx, row)
+  if subpath_waiting(ctx, row) then return false end
+  local mana = row.mana or 0
+  if ctx.mp < mana then ctx:say("Your will is too weak."); return false end
+  ctx:debitMana(mana)
+  if (row.duration or 0) > 0 then ctx:setCooldown(ctx.spellKey, row.duration) end
+  ctx:menu("What do you wish to do?", SCOUT_MARK .. "|" .. SCOUT_UNMARK, "scouting_trip_pick")
+  ctx:narrated()                                                   -- the script sends no line
+  return true
+end
+
+function verbs.scouting_trip_pick(ctx, row)
+  if ctx.answer == SCOUT_MARK then ctx:ask("Who will be granted the mark?", "scouting_trip_mark"); return true end
+  if ctx.answer == SCOUT_UNMARK then ctx:ask("Who will have their mark removed?", "scouting_trip_unmark"); return true end
+  return false
+end
+
+-- The typed name's refusals, in the script's order, each a plain box; true once the name is a player near the caster.
+local function scout_found(ctx)
+  if string.find(ctx.answer, "[^%a%s']") then ctx:dialog("You can only enter letters and spaces."); return false end
+  if not ctx:pcTargetNamed(ctx.answer) then ctx:dialog("That player is currently not online."); return false end
+  if ctx.targetIsSelf then ctx:dialog("You cannot provide your own recognition."); return false end
+  if not ctx:targetWithin(SCOUT_RANGE) then ctx:dialog("That person is not near you."); return false end
+  return true
+end
+
+function verbs.scouting_trip_mark(ctx, row)
+  if not scout_found(ctx) then return false end
+  local text = "Scouted with Rangers %d times, marked by " .. ctx.name .. " (" .. ctx.gameDate .. ")"
+  if not ctx:markTarget(SCOUT_KEY, SCOUT_KEY, text, SCOUT_ICON, SCOUT_COLOR) then return false end
+  ctx:dialogThenTarget(ctx.targetName .. " has been recognized for scouting.",
+                       "You have been recognized for scouting with the Rangers.")
+  return true
+end
+
+function verbs.scouting_trip_unmark(ctx, row)
+  if not scout_found(ctx) then return false end
+  if not ctx:unmarkTarget(SCOUT_KEY, SCOUT_KEY) then return false end
+  ctx:dialogThenTarget(ctx.targetName .. " has had their mark removed.",
+                       "You have had your mark removed for Scouting with Rangers by " .. ctx.name .. ".")
+  return true
+end

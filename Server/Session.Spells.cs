@@ -3723,14 +3723,19 @@ public sealed partial class Session
         Log.Info($"      Bladestorm(lua) -> trap placed at ({_char.X},{_char.Y}), expires in {lifetimeMs}ms");
     }
 
-    /// <summary>Spy kit's pick (<c>ctx:setTrap</c>; RTK <c>Spells/Subpaths/Spy/spy_kit.lua:35-74</c>): a hidden trap of
-    /// <paramref name="kind"/> on the caster's own tile, owned by the caster, cleared by the world's expiry sweep after
+    /// <summary>Spy kit's pick and Ranger's Pit trap (<c>ctx:setTrap</c>; RTK <c>Spells/Subpaths/Spy/spy_kit.lua:35-74</c>,
+    /// <c>Spells/Subpaths/Ranger/pit_trap.lua:16-25</c>): a hidden trap of <paramref name="kind"/> (a subpath trap kind,
+    /// <see cref="World.IsSubpathTrap"/>) on the caster's own tile, owned by the caster, cleared by the world's expiry sweep after
     /// <paramref name="lifetimeMs"/> if nothing springs it (RTK's trap NPC's 20 s <c>endAction</c>). Written through
-    /// <see cref="World.PlaceTrap"/>, which takes the world lock inside, as every trap is placed.</summary>
+    /// <see cref="World.PlaceTrap"/>, which takes the world lock inside, as every trap is placed. No trap for a caster who
+    /// is leaving or whose session a second login has replaced (<see cref="CasterGone"/>; #423's review, F1): the trap is
+    /// a world write, and Spy kit's pick, like Carve arrow's, can wait at the Lua gate while a kick lands.</summary>
     internal void LuaSetSpyTrap(SpellDef sp, string kind, int lifetimeMs)
     {
-        if (!World.IsSpyTrap(kind)) throw new ArgumentException($"no Spy kit trap '{kind}'", nameof(kind));
-        if (lifetimeMs <= 0) throw new ArgumentException("a Spy kit trap needs a lifetime", nameof(lifetimeMs));
+        if (!World.IsSubpathTrap(kind)) throw new ArgumentException($"no subpath trap '{kind}'", nameof(kind));
+        if (lifetimeMs <= 0) throw new ArgumentException("a subpath trap needs a lifetime", nameof(lifetimeMs));
+        using var _ = EnterState();   // #29: held by the verb already; the gone-caster test reads under it
+        if (CasterGone($"{kind} trap")) return;
         _world.PlaceTrap(_char.Map, _char.X, _char.Y, kind, _char.Id, Environment.TickCount64 + lifetimeMs);
         Log.Info($"      {sp.Name}(lua) -> {kind} trap at ({_char.X},{_char.Y}) on map {_char.Map}, gone in {lifetimeMs}ms");
     }
@@ -3779,6 +3784,52 @@ public sealed partial class Session
                 throw new ArgumentException($"no Spy kit trap '{kind}'", nameof(kind));
         }
         Log.Info($"   -> {_char.Name} sprang a {kind} trap (owner {ownerId}) on map {_char.Map} at ({_char.X},{_char.Y})");
+    }
+
+    /// <summary>This player walked onto a Pit trap where it may touch them (<see cref="World.CheckPlayerTrapTrigger"/>, on
+    /// their own thread, after the world lock is released; its owner was online): RTK
+    /// <c>NPCs/trap/rogue_traps/Ranger/pit_trap.lua:2-36</c> on a player, inside this player's own monitor. "CHOMP!", then
+    /// half the owner's max vita plus half their max mana (<paramref name="ownerVita"/>, <paramref name="ownerMana"/>, read
+    /// when it sprang) through RTK's calculateDamage (armour clamped to -80 and 100, the sleep amplifier, the deduction) and
+    /// never the last vita (<see cref="World.PitTrapDamage"/>), off this player's vita with no ward test (RTK's plain
+    /// <c>removeHealth</c>, as <see cref="ReceiveEnvironmentDamage"/>'s note on the stepped-on traps says), the over-head
+    /// bar, and graphic 44. The owner is marked as this player's own PvP foe (RTK's <c>block.attacker = npc.owner</c>), the
+    /// one field of theirs the poison tick marks too; nothing of the owner's is written. At 1 vita nothing comes off and
+    /// the amplifier is not spent (RTK's removeHealth(0) runs no on-hit script). The trap is already gone.</summary>
+    internal void SpringPitTrap(uint ownerId, long ownerVita, long ownerMana)
+    {
+        using var _ = EnterState();   // #29: this player's own state, on their own thread
+        if (IsDead) return;
+        SendMiniText("CHOMP!");
+        int hp = (int)_char.Hp;
+        int dmg = hp == 1 ? 0 : World.PitTrapDamage(ownerVita * 0.5 + ownerMana * 0.5,
+                                                    World.PitTrapArmorFactor(_char.Ac + Totals().armor, -80),
+                                                    TakeDamageAmp(), EffDeduction, hp);
+        if (dmg > 0)
+        {
+            _char.Hp = (uint)Math.Max(0, hp - dmg);
+            WakeUp(byDamage: true);
+        }
+        SendStats();
+        byte pct = PlayerHpPercent();
+        _world.BroadcastWideArea(_char.Map, _char.X, _char.Y, p => p.DamageOver(_char.Id, pct, HitCritByte));
+        BroadcastFx(_char.Id, World.PitTrapAnim, 0);
+        if (ownerId != _char.Id) MarkPvpFoe(ownerId);
+        Log.Info($"   -> {_char.Name} sprang a pit trap (owner {ownerId}) for {dmg} on map {_char.Map} at ({_char.X},{_char.Y})");
+        if (IsDead) Die();   // a strike exactly equal to the vita left, which RTK's strict test lets through
+    }
+
+    /// <summary>This player's max vita and max mana with their gear and buffs (RTK <c>player.maxHealth</c>,
+    /// <c>player.maxMagic</c>), as ANOTHER thread reads them: the base fields bare and the totals from the snapshot this
+    /// player last published (<see cref="PeerTotals"/>), the read divination and the PvP swing make. No monitor is taken, so
+    /// it is safe from inside <c>World._lock</c> (the Pit trap's owner, read when a creature springs it).</summary>
+    internal (long Vita, long Mana) PeerMaxVitaMana
+    {
+        get
+        {
+            var t = PeerTotals();
+            return (Math.Max(1, (long)_char.MaxHp + t.hp), Math.Max(0, (long)_char.MaxMp + t.mp));
+        }
     }
 
     // Pet Summon core (see CastPetSummon): spawn this pet spell's mob on the first free tile of a CLOCKWISE
@@ -4799,6 +4850,169 @@ public sealed partial class Session
         }
         Log.Info($"      (lua) {sp.Name} -> {range}-tile hold [{category}] for {durMs}ms on {held} creature(s)");
         return held;
+    }
+
+    // ---- the Ranger spells (RTK Spells/Subpaths/Ranger/) --------------------------------------------------------------
+    // The engine half of the Ranger verbs in game-data/spell_verbs.lua: items inside a cast (Carve arrow, P9: RTK's
+    // player:hasItem, removeItem and addItem, with addItem's full pack), and a mark on a named player (Scouting trip, P10:
+    // their saved registry count and their legend). Pit trap's trap is World.cs's; Tree bark, Forest cover, Skill up and
+    // Call companion are verbs and rows on primitives that exist.
+    //
+    // LOCKS. As the Chongun and Monk halves: a verb runs on the caster's packet thread (or, for an answer or a menu pick,
+    // the caster's handler thread), inside the caster's monitor and the Lua gate, never World._lock. The items are the
+    // caster's own bag, written under the monitor the cast holds; a floor drop goes through World.DropItem, which takes
+    // World._lock inside. The mark is decided and written inside the named player's own monitor (ReceiveMarkCount,
+    // ReceiveMarkClear, entered here by StateRank, the ReceiveKarmaRestore shape); their box and the drop of their waiting
+    // conversation go through SendSpellBoxToTarget, inside their monitor too. No new lock.
+
+    /// <summary>How many of <paramref name="itemKey"/> the caster carries in plain stacks (no engraved name), summed across
+    /// stacks (<c>ctx:itemCount</c>): what RTK's <c>player:hasItem(name, n)</c> counts (rtk/src/map/sl.c, pcl_hasitem, which
+    /// passes over a stack with an engraved name). 0 for an item Items.csv does not have.</summary>
+    internal int LuaItemCount(string? itemKey)
+    {
+        var def = string.IsNullOrEmpty(itemKey) ? null : Content.ItemByKey(itemKey);
+        return def is null ? 0 : _char.Inventory.Where(i => i.ItemId == def.Id && i.CustomName.Length == 0).Sum(i => i.Amount);
+    }
+
+    /// <summary>Take <paramref name="amount"/> of <paramref name="itemKey"/> from the caster's plain stacks
+    /// (<c>ctx:takeItem</c>), as RTK's <c>player:removeItem(name, n)</c> takes them (sl.c, pcl_removeinventoryitem;
+    /// pc.c, pc_delitem): the part-full stacks first, then the rest, each in slot order; a stack that empties goes with
+    /// "&lt;item&gt; removed.", one left part-full redraws with the line "&lt;item&gt; (&lt;n&gt;)", n the number taken
+    /// from it. False, taking nothing, when there are not that many (RTK's scripts ask hasItem first), or for a caster who
+    /// is leaving or whose session a second login has replaced (<see cref="CasterGone"/>). Saved.</summary>
+    internal bool LuaTakeItem(string? itemKey, int amount)
+    {
+        using var _ = EnterState();   // #29: held by the verb already; the gone-caster test reads under it
+        if (CasterGone($"take of '{itemKey}'")) return false;
+        var def = string.IsNullOrEmpty(itemKey) ? null : Content.ItemByKey(itemKey);
+        if (def is null || amount <= 0 || LuaItemCount(itemKey) < amount) return false;
+        int need = amount;
+        var plain = _char.Inventory.Where(i => i.ItemId == def.Id && i.CustomName.Length == 0).OrderBy(i => i.Slot).ToList();
+        foreach (var it in plain.Where(i => i.Amount < def.StackCap).Concat(plain.Where(i => i.Amount >= def.StackCap)))
+        {
+            if (need <= 0) break;
+            int take = Math.Min(need, it.Amount);
+            it.Amount -= take;
+            need -= take;
+            if (it.Amount <= 0) { _char.Inventory.Remove(it); SendDelItem(it.Slot, DelReason.Removed); }
+            else { SendMiniText($"{def.Name} ({take})"); SendAddItem(it); }
+        }
+        SaveChar();
+        Log.Info($"      (lua) took {amount} {def.Key} from '{_char.Name}'");
+        return true;
+    }
+
+    /// <summary>Give <paramref name="amount"/> of <paramref name="itemKey"/> to the caster (<c>ctx:giveItem</c>), as RTK's
+    /// <c>player:addItem(name, n)</c> gives it (sl.c, pcl_additem; pc.c, pc_additem): at the item's own durability
+    /// (<c>itemdb_dura</c>; 30 for Carve arrow's arrows), into the bag as far as it fits; what does not fit lies on the floor at
+    /// the caster's feet, with the bag's own line ("You can't have more.", or the carry cap's), as RTK's
+    /// <c>pc_dropitemfull</c> drops it. The floor pile is its own: this server's floor never merges piles, where RTK's adds
+    /// it to a matching one on that tile. Returns how many went into the bag. Saved. Nothing at all, bag or floor, for a
+    /// caster who is leaving or whose session a second login has replaced (<see cref="CasterGone"/>).</summary>
+    internal int LuaGiveItem(string? itemKey, int amount)
+    {
+        using var _ = EnterState();   // #29: held by the verb already; the gone-caster test reads under it
+        if (CasterGone($"give of '{itemKey}'")) return 0;
+        var def = string.IsNullOrEmpty(itemKey) ? null : Content.ItemByKey(itemKey);
+        if (def is null || amount <= 0) return 0;
+        ushort dura = def.Durability;
+        int placed = GivePlaced(def, amount, dura);
+        int left = amount - placed;
+        if (left > 0)
+            _world.DropItem(_char.Map, new GroundItem { Id = _world.AllocateItemId(), ItemId = def.Id, X = _char.X, Y = _char.Y,
+                                                        Amount = left, Dura = dura, Graphic = def.Icon,
+                                                        Owner = def.Bonded ? _char.Name : "" });
+        SaveChar();
+        Log.Info($"      (lua) gave {placed} {def.Key} to '{_char.Name}'{(left > 0 ? $", {left} dropped at their feet" : "")}");
+        return placed;
+    }
+
+    /// <summary>Is this caster leaving, or has a second login replaced their session (#423's review, F1)? Then a primitive
+    /// that writes the caster's saved state or the world refuses, as <see cref="ReceiveTitle"/> refuses a replaced player.
+    /// A verb runs in the Lua gate, whose slow path lets the caster's monitor go while it waits
+    /// (<see cref="EnterScriptGate"/>), and a second login's <see cref="KickForReplacement"/> can land in that gap: it writes
+    /// the row and latches the fence, so a take after it would be in memory only, and a give to the floor a real item,
+    /// an arrow out of nothing. Asked under the caster's monitor, which the kick takes, so it cannot change while the
+    /// write it guards runs. The tests made before the gate need no replaced test of their own: the kick closes the
+    /// connection in the same hold of the monitor in which it latches the fence, and no frame is dispatched after the
+    /// close, so only the gate's wait lets a replaced session go on.</summary>
+    private bool CasterGone(string what)
+    {
+        AssertStateHeld(nameof(CasterGone));
+        if (!_leaving && !IsReplaced) return false;
+        Log.Info($"      -x (lua) no {what} for '{_char.Name}': {(IsReplaced ? "replaced by a second login" : "leaving")}");
+        return true;
+    }
+
+    /// <summary>The Items.csv name of <paramref name="itemKey"/> (<c>ctx:itemName</c>; RTK <c>Item(name).name</c>, the
+    /// definition's name), "" for none.</summary>
+    internal static string LuaItemName(string? itemKey) =>
+        string.IsNullOrEmpty(itemKey) ? "" : Content.ItemByKey(itemKey)?.Name ?? "";
+
+    /// <summary>Is the player this cast's typed name resolved on the caster's map and within <paramref name="range"/> tiles
+    /// on both axes (<c>ctx:targetWithin</c>; RTK <c>distanceSquare(player, target, range)</c>, Scripts/scripts.lua:378-410)?
+    /// False with no target. Bare reads of where they stand, as <c>ctx.targetMap</c> reads it.</summary>
+    internal bool LuaTargetWithin(int range) =>
+        _pcSpellTarget is { } t && t.CharMap == _char.Map
+        && Math.Abs(t.PlayerX - _char.X) <= range && Math.Abs(t.PlayerY - _char.Y) <= range;
+
+    /// <summary>Scouting trip's mark (<c>ctx:markTarget</c>; RTK <c>Spells/Subpaths/Ranger/scouting_trip.lua:58-70</c>) on the
+    /// player this cast resolved, wherever they stand: <see cref="ReceiveMarkCount"/> inside their own monitor. False, changing
+    /// nothing, with no target or one who is leaving.</summary>
+    internal bool LuaMarkTarget(SpellDef sp, string? regKey, string? mark, string? text, int icon, int color)
+    {
+        if (_pcSpellTarget is not { } target || string.IsNullOrEmpty(regKey) || string.IsNullOrEmpty(mark)) return false;
+        bool done = target.ReceiveMarkCount(regKey, mark, text ?? "", (byte)icon, (byte)color);
+        Log.Info($"      (lua) {sp.Name} -> {mark} {(done ? "marked on" : "not marked on (leaving)")} '{target.CharName}'");
+        return done;
+    }
+
+    /// <summary>Scouting trip's unmark (<c>ctx:unmarkTarget</c>; RTK <c>scouting_trip.lua:108-109</c>) on the player this cast
+    /// resolved: <see cref="ReceiveMarkClear"/> inside their own monitor. False, changing nothing, with no target or one who
+    /// is leaving.</summary>
+    internal bool LuaUnmarkTarget(SpellDef sp, string? regKey, string? mark)
+    {
+        if (_pcSpellTarget is not { } target || string.IsNullOrEmpty(regKey) || string.IsNullOrEmpty(mark)) return false;
+        bool done = target.ReceiveMarkClear(regKey, mark);
+        Log.Info($"      (lua) {sp.Name} -> {mark} {(done ? "cleared on" : "not cleared on (leaving)")} '{target.CharName}'");
+        return done;
+    }
+
+    /// <summary>A mark counts up on THIS player (<see cref="LuaMarkTarget"/>), inside this player's own monitor, in the
+    /// script's order: the saved registry key <paramref name="regKey"/> one more
+    /// (<c>target.registry["scouted_with_rangers"] + 1</c>), the legend named <paramref name="mark"/> gone
+    /// (<c>removeLegendbyName</c>) and a new one at the end of the list reading <paramref name="text"/> with "%d" the new
+    /// count, in icon <paramref name="icon"/> and colour <paramref name="color"/> (<c>addLegend</c>). The registry write saves
+    /// the two together. Nothing for a player who is logging out or whose session a second login has replaced. Returns
+    /// whether it landed.
+    /// <para>Cross-session: called from the caster's thread, which holds the caster's monitor and the Lua gate and never
+    /// <c>World._lock</c>, so this takes this player's monitor here, by <c>StateRank</c>, the
+    /// <see cref="ReceiveKarmaRestore"/> shape.</para></summary>
+    internal bool ReceiveMarkCount(string regKey, string mark, string text, byte icon, byte color)
+    {
+        using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        if (_leaving || IsReplaced) return false;
+        var registry = Quest(QuestState.Registry);
+        int count = registry.Get(regKey) + 1;
+        _char.Legends.RemoveAll(l => l.Name == mark);
+        _char.Legends.Add(new Legend(icon, color, text.Replace("%d", count.ToString(System.Globalization.CultureInfo.InvariantCulture)), mark));
+        registry.Set(regKey, count);   // saves the legend and the count together (SaveChar)
+        Log.Info($"   -> MARKED: {_char.Name} {regKey} {count}");
+        return true;
+    }
+
+    /// <summary>A mark is taken off THIS player (<see cref="LuaUnmarkTarget"/>), inside this player's own monitor: the saved
+    /// registry key <paramref name="regKey"/> becomes 0 and the legend named <paramref name="mark"/> goes
+    /// (<c>target.registry["scouted_with_rangers"] = 0</c>, <c>removeLegendbyName</c>). Saved together. Nothing for a player
+    /// who is logging out or replaced. Returns whether it landed. Cross-session as <see cref="ReceiveMarkCount"/>.</summary>
+    internal bool ReceiveMarkClear(string regKey, string mark)
+    {
+        using var _ = EnterState();   // #29: cross-thread entry into this session's state
+        if (_leaving || IsReplaced) return false;
+        _char.Legends.RemoveAll(l => l.Name == mark);
+        Quest(QuestState.Registry).Set(regKey, 0);   // saves the legend and the count together (SaveChar)
+        Log.Info($"   -> MARK CLEARED: {_char.Name} {regKey}");
+        return true;
     }
 
     // ---- combat-stray primitives (sacrifice strikes + ambush) ----------------------------------------------
@@ -5858,14 +6072,14 @@ public sealed partial class Session
     //     cave mob-spawn traps; "Spots Ambushes on ground and marks them off as Steel daggers."
     //   * class 2 (Rogue)   — dog/spot_traps.lua       — reveals the rogue combat-trap family (dart/snare/
     //     repeating/flash/spear/poison/death/sleep).
-    // Neither reveals the cosmetic shiver echo (Session.TryMythicFallRoom), the tiger warp-traps, a bladestorm decoy, or
-    // Spy kit's three traps (RTK's rogue list names only the eight, spotTraps.lua:20-27). A non-warrior caster of either
-    // spell gets the rogue set (RTK only special-cases class 1).
+    // Neither reveals the cosmetic shiver echo (Session.TryMythicFallRoom), the tiger warp-traps, a bladestorm decoy,
+    // Spy kit's three traps or Ranger's Pit trap (RTK's rogue list names only the eight, spotTraps.lua:20-27). A
+    // non-warrior caster of either spell gets the rogue set (RTK only special-cases class 1).
     private Trap[] RevealableTrapsNear() =>
         _world.TrapsNear(_char.Map, _char.X, _char.Y, 15)
             .Where(t => CharBasePathId == 1
                 ? t.Kind == "ambush"
-                : t.Kind != "ambush" && t.Kind != "shiver" && t.Kind != "bladestorm" && !World.IsSpyTrap(t.Kind))
+                : t.Kind != "ambush" && t.Kind != "shiver" && t.Kind != "bladestorm" && !World.IsSubpathTrap(t.Kind))
             .ToArray();
 
     // Watchful Eye (warrior) + Spot Traps (dog/rogue), see Content.IsSpotTrapsSpell and RevealableTrapsNear:

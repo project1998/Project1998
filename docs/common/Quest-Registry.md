@@ -29,8 +29,10 @@ IS the saved key, in either map. The Lua `stage`/`setStage`/`reg`/`setReg` verbs
 verbs' `reg`/`setReg`, `mob_ai.lua`'s `actorQuest`, `@quest`'s raw keys, and the registry globals several
 features share (`home`, `sage_rung`, `sage_timer`, `dog_flag`, `carnage_wins`, `mentored`, `craft_*`,
 `damage_shotgun`, `baekhos_cunning`, `title_of_nobility_timer`, Title of nobility's 4-hour wait: the Unix time it
-ends, as RTK's `player.registry` key, and `been_forgiven`, how many times Monk's Forgive has restored the player's
-karma, as RTK's `player.registry` key, which its legend counts) all live there.
+ends, as RTK's `player.registry` key, `been_forgiven`, how many times Monk's Forgive has restored the player's
+karma, as RTK's `player.registry` key, which its legend counts, and `scouted_with_rangers`, how many times a Ranger's
+Scouting trip has marked the player (0 once a mark is removed), as RTK's `player.registry` key, which its legend counts)
+all live there.
 
 | Namespace (= stage key) | Slot | Saved key |
 |---|---|---|

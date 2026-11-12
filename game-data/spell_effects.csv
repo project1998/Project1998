@@ -664,6 +664,10 @@ ki_strike,pcsub,Utility,,,,,,,,,,,122,,,
 blend,pcsub,Utility,,,,,,,,,,,16,,,
 hear_footstep_do,pcsub,Utility,,,,,,,,,,,11,,,
 crossing_swords,pcsub,Utility,,,,,,,,,,,104,705,18,115000
+skill_up_ranger,pcsub,Utility,,,,,,,,,,,250,705,6,150000
+forest_cover,pcsub,Utility,,,,,,,,,,,16,,,
+tree_bark,pcsub,Utility,,,,,,,,,,,11,5,,
+call_companion,pcsub,Utility,,,,,,,,,,,,22,,
 skill_up_spy,pcsub,Utility,,,,,,,,,,,250,705,6,150000
 hear_footstep_spy,pcsub,Utility,,,,,,,,,,,11,,,
 mimic_spy,pcsub,Utility,,,,,,,,,,,16,,,

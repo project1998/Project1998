@@ -1630,7 +1630,7 @@ public static partial class Content
         ChinBaekHoRyung,                                        // Session.CastArch + the sacrifice verb — x1.5
         "harden_body", "harden_body_poet", "deaths_guard_poet", // Session.DamageImmune — total damage immunity
         "lifes_protection_poet", "body_of_alignment_poet",
-        "invincibility",                                        // Session.HardBodyWarded — swings only (DamageIntake's gate)
+        "invincibility", "tree_bark",                           // Session.HardBodyWarded — swings only (DamageIntake's gate)
         "baekhos_cunning",                                      // spell_verbs.lua stance_cunning — its tier window
     };
 

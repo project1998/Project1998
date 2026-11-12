@@ -963,15 +963,19 @@ public sealed partial class Session
         get { foreach (var w in HardenBodyWards) if (HasStatusFlag(w)) return true; return false; }
     }
 
-    // Chongun's Invincibility (RTK Spells/Subpaths/Chongun/invincibility.lua) is in RTK's hardBodies list
+    // Chongun's Invincibility (RTK Spells/Subpaths/Chongun/invincibility.lua) and Ranger's Tree bark (Spells/Subpaths/
+    // Ranger/tree_bark.lua, Invincibility's body, as its own comment says) are in RTK's hardBodies list
     // (Spells/spellTables.lua:252-260), as the five wards above are. Every hard-body spell reads that list as "You
     // already cast that spell." (HardBodyWarded, ctx.immune), but RTK reads it to stop a blow in its swing script only
-    // (Scripts/hitCritChance.lua:26), so here it stops a swing and nothing else: DamageIntake's gate asks HardBodyWarded
+    // (Scripts/hitCritChance.lua:26), so here each stops a swing and nothing else: DamageIntake's gate asks HardBodyWarded
     // for the two melee kinds and DamageImmune for the rest. A spell lands on it, a creature's or a player's, and so does a
     // venom tick (TickPoison asks DamageImmune), as in RTK, whose removeHealthExtend tests only the four poet wards
     // (player.lua:164-170).
-    private const string InvincibilityWard = "invincibility";
-    internal bool HardBodyWarded => DamageImmune || HasStatusFlag(InvincibilityWard);
+    private static readonly string[] SwingOnlyWards = { "invincibility", "tree_bark" };
+    internal bool HardBodyWarded
+    {
+        get { if (DamageImmune) return true; foreach (var w in SwingOnlyWards) if (HasStatusFlag(w)) return true; return false; }
+    }
 
     // Called by World.Tick (the shared mob-AI heartbeat) when a provoked mob lands a swing on us: apply the
     // damage, refresh our HUD, and show the over-head hit/HP-bar to the whole map (the same 0x13 feedback a

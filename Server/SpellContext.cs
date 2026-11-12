@@ -583,10 +583,10 @@ public sealed class SpellContext
     public bool placeTrap()     => _s.LuaPlaceTrap(_sp, answer);
     /// <summary>Place a bladestorm decoy on the caster's tile, auto-expiring in <paramref name="lifetimeMs"/> ms.</summary>
     public void placeBladestorm(double lifetimeMs) => _s.LuaPlaceBladestorm((int)lifetimeMs);
-    /// <summary>Spy kit's pick: set a trap of <paramref name="kind"/> ("toxic_spray", "tripwire" or "smoke_screen", RTK's
-    /// trap NPCs) on the caster's own tile, owned by the caster, gone in <paramref name="lifetimeMs"/> ms if nothing has
-    /// sprung it (RTK <c>addNPC(..., 2, 1000, 20000, player.ID)</c>). What it does when sprung is World's (the Spy kit
-    /// block). Throws for any other kind.</summary>
+    /// <summary>Spy kit's pick and Ranger's Pit trap: set a trap of <paramref name="kind"/> ("toxic_spray", "tripwire",
+    /// "smoke_screen" or "pit_trap", RTK's trap NPCs) on the caster's own tile, owned by the caster, gone in
+    /// <paramref name="lifetimeMs"/> ms if nothing has sprung it (RTK <c>addNPC(..., 2, 1000, 20000, player.ID)</c>). What it
+    /// does when sprung is World's (the Spy kit block, the Pit trap block). Throws for any other kind.</summary>
     public void setTrap(string kind, double lifetimeMs) => _s.LuaSetSpyTrap(_sp, kind, (int)lifetimeMs);
     /// <summary>Summon this spell's pet as a real owned world mob (one tile ahead, else on the caster's tile).
     /// False if the pet/mob couldn't be resolved.</summary>
@@ -1056,4 +1056,39 @@ public sealed class SpellContext
     /// is passed over. Returns how many.</summary>
     public double holdAround(string category, double durMs, double range) =>
         _s.LuaHoldAround(_sp, category, (int)durMs, (int)range);
+
+    // ---- the Ranger spells' primitives (RTK Spells/Subpaths/Ranger/) ------------------------------------------------
+    // Items inside a cast (Carve arrow, P9) are the caster's own bag, under the monitor the cast holds; a mark (Scouting
+    // trip, P10) lands on another player inside that player's own monitor (ReceiveMarkCount, ReceiveMarkClear, entered by
+    // StateRank). No new lock. See Session.Spells.cs, "the Ranger spells".
+    /// <summary>How many of <paramref name="itemKey"/> (an Items.csv identifier) the caster carries in plain stacks, the
+    /// count RTK's <c>player:hasItem(name, n)</c> compares (a stack with an engraved name is passed over).</summary>
+    public double itemCount(string itemKey) => _s.LuaItemCount(itemKey);
+    /// <summary>Take <paramref name="amount"/> of <paramref name="itemKey"/> from the caster's plain stacks, as RTK's
+    /// <c>player:removeItem(name, n)</c> takes them (part-full stacks first; its lines). False, taking nothing, when there
+    /// are not that many.</summary>
+    public bool takeItem(string itemKey, double amount) => _s.LuaTakeItem(itemKey, (int)amount);
+    /// <summary>Give <paramref name="amount"/> of <paramref name="itemKey"/> to the caster at the item's own durability, as
+    /// RTK's <c>player:addItem(name, n)</c>: what does not fit in the bag lies at the caster's feet, with the bag's line.
+    /// Returns how many went into the bag.</summary>
+    public double giveItem(string itemKey, double amount) => _s.LuaGiveItem(itemKey, (int)amount);
+    /// <summary>The Items.csv name of <paramref name="itemKey"/> (RTK <c>Item(name).name</c>); "" for none.</summary>
+    public string itemName(string itemKey) => Session.LuaItemName(itemKey);
+    /// <summary>Is the player <see cref="pcTargetNamed"/> resolved on the caster's map within <paramref name="range"/> tiles
+    /// on both axes (RTK <c>distanceSquare(player, target, range)</c>)? False with none.</summary>
+    public bool targetWithin(double range) => _s.LuaTargetWithin((int)range);
+    /// <summary>The world's date as RTK's <c>curT()</c> writes it, "Yuri &lt;year&gt;, &lt;season&gt;" (the stamp every legend
+    /// here carries, <see cref="Character.GameDate"/>).</summary>
+    public string gameDate => Character.GameDate;
+    /// <summary>Scouting trip's mark on the player <see cref="pcTargetNamed"/> resolved, wherever they stand, inside their
+    /// own monitor: their saved registry key <paramref name="regKey"/> one more, their legend <paramref name="mark"/> gone
+    /// and a new one at the end reading <paramref name="text"/> with "%d" the new count, in icon <paramref name="icon"/> and
+    /// colour <paramref name="color"/> (RTK <c>registry[key] + 1</c>, <c>removeLegendbyName</c>, <c>addLegend</c>). Saved
+    /// with them. False, changing nothing, with no target or one who is leaving.</summary>
+    public bool markTarget(string regKey, string mark, string text, double icon, double color) =>
+        _s.LuaMarkTarget(_sp, regKey, mark, text, (int)icon, (int)color);
+    /// <summary>Scouting trip's unmark on the player <see cref="pcTargetNamed"/> resolved, inside their own monitor: their
+    /// saved registry key <paramref name="regKey"/> 0 and their legend <paramref name="mark"/> gone. Saved with them. False,
+    /// changing nothing, with no target or one who is leaving.</summary>
+    public bool unmarkTarget(string regKey, string mark) => _s.LuaUnmarkTarget(_sp, regKey, mark);
 }

@@ -74,6 +74,12 @@
 # and apply_stealth, both rows 30807 and 30810 (one identifier), to verb=not_castable row (its script's cast is empty).
 # The trap spells toxic_spray, tripwire and smoke_screen (50043-50045) stay on verb=generic: Spy kit's traps cast
 # their effects without them. No other line changed.
+# The Ranger spells slice (2026-11-12) then moved seven PC-subpath spells off verb=generic (the project owner's P5
+# and the slice's Scouting trip answer: RTK's scripts; the smaller calls as RTK under P5), each bound by a
+# SpellParams.csv row: skill_up_ranger to verb=chungryong_rage row (Spy's skill_up ladder), forest_cover to
+# verb=disguise row (Costume's verb), tree_bark to verb=invincible row (Invincibility's verb), set_pit_trap to
+# verb=pit_trap row, carve_arrow to verb=carve_arrow row, call_companion to verb=companion_menu row and scouting_trip to
+# verb=scouting_trip row. No other line changed.
 # Re-record with P1998_SPELL_ROUTES_OUT (see the fact's doc). The header a re-record writes is the
 # fact's own, which names only spirit_blade, so carry this history over by hand.
 absorb_rogue	2084	verb=drain row
@@ -166,10 +172,10 @@ brothers_of_spirit_poet	4050	verb=area_heal
 burial_dance_rogue	2129	verb=sacrifice
 burn	50050	verb=venom row
 calculating_blow_rogue	2092	verb=sacrifice
-call_companion	30706	verb=generic
+call_companion	30706	verb=companion_menu row
 call_lightning	50014	verb=generic
 call_lightning_mage	3100	verb=arch_damage
-carve_arrow	30705	verb=generic
+carve_arrow	30705	verb=carve_arrow row
 chain_lightning_mage	3143	verb=area_zap
 chance_rogue	2112	verb=misc
 chaos_rain_mage	3127	verb=arch_debuff
@@ -332,7 +338,7 @@ flowing_energy_rogue	2130	verb=sacrifice
 focused_blow_rogue	2127	verb=sacrifice
 follow	12024	verb=arch_debuff
 forest_blessing_warrior	1078	verb=ward row
-forest_cover	30702	verb=generic
+forest_cover	30702	verb=disguise row
 forests_discord_mage	3122	verb=area_zap
 forge_of_life_poet	4146	verb=arch_heal
 forgetfulness_rogue	2062	verb=arch_debuff
@@ -730,7 +736,7 @@ sanctuary_mage	3068	verb=arch_targetbuff
 sanctuary_poet	4053	verb=arch_targetbuff
 scourge	50011	verb=generic
 scourge_poet	4105	verb=curse row
-scouting_trip	30707	verb=generic
+scouting_trip	30707	verb=scouting_trip row
 sea_breeze	31405	verb=breeze_heal row
 seal_fate	31006	verb=generic
 seal_wounds_rogue	2085	verb=arch_heal
@@ -742,7 +748,7 @@ set_cutting_edge_trap	2713	verb=bladestorm row
 set_dart_trap	2702	verb=set_trap
 set_death_trap	2708	verb=set_trap
 set_flash_trap	2703	verb=set_trap
-set_pit_trap	30704	verb=generic
+set_pit_trap	30704	verb=pit_trap row
 set_poison_dart_trap	2707	verb=set_trap
 set_repeating_dart_trap	2704	verb=set_trap
 set_sleep_trap	2709	verb=set_trap
@@ -769,7 +775,7 @@ singe_mage	3016	verb=arch_damage
 singe_poet	4029	verb=arch_damage
 singe_rogue	2017	verb=arch_damage
 skill_up_merchant	30601	verb=generic
-skill_up_ranger	30701	verb=generic
+skill_up_ranger	30701	verb=chungryong_rage row
 skill_up_spy	30801	verb=chungryong_rage row
 slash_warrior	1058	verb=arch_damage
 sleep_mage	3128	verb=arch_debuff
@@ -915,7 +921,7 @@ touch_of_the_bear_warrior	1044	verb=arch_buff
 toxic_spray	50044	verb=generic
 tranquil_symphony	31603	verb=map_sanctuary row
 transport_rogue	2105	verb=leap
-tree_bark	30703	verb=generic
+tree_bark	30703	verb=invincible row
 tree_dart_mage	3046	verb=arch_damage
 treefall_mage	3086	verb=arch_damage
 trial_by_fire_rogue	2115	verb=misc

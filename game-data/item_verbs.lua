@@ -63,9 +63,18 @@ function verbs.ward(ctx, row)
 end
 
 -- scroll_of_immortality: an armor-scaled success roll before granting the harden-body ward (RTK's own
--- ceil((120 + clampedArmor) / 2)% chance). Refuses (no consume) while already active or on a failed roll.
+-- ceil((120 + clampedArmor) / 2)% chance). Refuses (no consume) under any of RTK's hardBodies, its own ward among them
+-- (RTK Items/Consumables/scrolls/scroll_of_immortality.lua:7-10: checkIfCast(hardBodies), "You already cast that
+-- spell."; the list is Spells/spellTables.lua:252-260: Tree bark, Invincibility, the Harden Body wards), or on a failed
+-- roll.
+local HARD_BODIES = { "tree_bark", "invincibility", "harden_body", "harden_body_poet", "deaths_guard_poet",
+                      "lifes_protection_poet", "body_of_alignment_poet" }
+
 function verbs.hardenbody(ctx, row)
   if ctx:hasStatus(row.statuskey) then ctx:say(row.activemsg); return false end
+  for _, ward in ipairs(HARD_BODIES) do
+    if ctx:hasStatus(ward) then ctx:say(row.activemsg); return false end
+  end
   local rate = math.ceil((120 + ctx.armor) / 2)
   if not ctx:chance(rate) then ctx:say("Something went wrong."); return false end
   ctx:setStatus(row.statuskey, row.duration or 0)

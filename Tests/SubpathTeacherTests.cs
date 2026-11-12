@@ -159,7 +159,14 @@ public sealed class SubpathTeacherTests
                              "master_weapon 99 60000 [1 ee_san_spike, 4 dragons_liver, 4 electra]; " +
                              "spirit_blade 99 60000 [1 ee_san_spike, 4 dragons_liver, 4 electra]")]
     [InlineData("Merchant",  "")]
-    [InlineData("Ranger",    "")]
+    // The Ranger spells slice: six of the seven at their scripts' prices, the copied lists as written (Tree bark asks
+    // Invincibility's, Scouting trip a Ju jak key's); Skill up, Forest cover and Carve arrow, whose scripts have no
+    // requirements(), at their rows' level, 0, for nothing; Call companion, whose price names boiled_meat (in no item
+    // table), off sale.
+    [InlineData("Ranger",    "carve_arrow 0 0 []; forest_cover 0 0 []; " +
+                             "scouting_trip 99 50000 [1 ju_jak_key, 1 surge]; " +
+                             "set_pit_trap 99 350 [2 fine_rabbit_meat]; skill_up_ranger 0 0 []; " +
+                             "tree_bark 99 0 [1 charm, 1 moon_helm, 20 tigers_heart]")]
     // The Spy spells slice: seven beside Assassinate, each at its script's price, the copied lists as written (Hear
     // footstep asks Blend's, Dagger to throat Assassinate's); Skill up, Spy kit and Mimic, whose scripts have no
     // requirements(), at their rows' level, 0, for nothing; Apply stealth, whose cast is empty, off sale.

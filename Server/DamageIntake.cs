@@ -259,8 +259,9 @@ public sealed partial class Session
         // Four of the five sources reach this gate; the fifth (room damage) walks past it, sourced. Which
         // ones and why is the note on DamageIntake.IgnoresHardenBody.
         //
-        // Chongun's Invincibility is the one ward that stops SWINGS only (the project owner, 2026-11-09, "Invincibility
-        // swings-only first", as RTK). RTK's hardBodies list holds it, and RTK reads that list to stop a blow in exactly
+        // Chongun's Invincibility and Ranger's Tree bark (Invincibility's body) are the two wards that stop SWINGS only
+        // (the project owner, 2026-11-09, "Invincibility swings-only first", as RTK; Tree bark as RTK under P5). RTK's
+        // hardBodies list holds both, and RTK reads that list to stop a blow in exactly
         // one place, Scripts/hitCritChance.lua:26, which every swing runs before its damage: a player's melee swing at a
         // player (clif.c clif_pc_damage) or at a creature, a creature's swing (mob.c's attack, Mobs/mob.lua's), and a
         // bow's shot (Items/Weapons/Bows/bow.lua). A spell, a player's or a creature's, lands through removeHealthExtend,
